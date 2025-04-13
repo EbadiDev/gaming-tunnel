@@ -78,36 +78,12 @@ install_gamingtunnel() {
         return 1
     fi
     
-    # Check disk space before proceeding
-    FREE_SPACE=$(df -m /root | awk 'NR==2 {print $4}')
-    if [ -z "$FREE_SPACE" ]; then
-        colorize yellow "Warning: Could not determine free space. Continuing anyway..." bold
-    elif [ "$FREE_SPACE" -lt 10 ]; then
-        colorize red "Error: Not enough disk space available (${FREE_SPACE}MB free, need at least 10MB)." bold
-        colorize yellow "Please free up some disk space before installing." bold
-        sleep 3
-        return 1
-    else
-        colorize green "Disk space check: ${FREE_SPACE}MB available. Continuing installation..." bold
-    fi
-    
     # Make sure the destination directory exists
     if ! [ -d "$DEST_DIR" ]; then
-        colorize yellow "Creating directory $DEST_DIR..." bold
-        mkdir -p "$DEST_DIR" 2>/tmp/mkdir_error
-        
+        mkdir -p "$DEST_DIR" &> /dev/null
         if ! [ -d "$DEST_DIR" ]; then
-            colorize red "Failed to create directory $DEST_DIR." bold
-            colorize yellow "Error details:" bold
-            if [ -f /tmp/mkdir_error ]; then
-                cat /tmp/mkdir_error
-                rm -f /tmp/mkdir_error
-            fi
-            colorize yellow "Possible causes:" bold
-            echo "- Insufficient permissions"
-            echo "- Disk space issues"
-            echo "- Filesystem mounted as read-only"
-            sleep 3
+            colorize red "Failed to create directory $DEST_DIR. Check permissions." bold
+            sleep 2
             return 1
         fi
     fi
@@ -126,98 +102,46 @@ install_gamingtunnel() {
         return 1
     fi
 
-    # Test internet connectivity
-    colorize yellow "Testing internet connectivity..." bold
-    if ! curl -s --head https://github.com >/dev/null; then
-        colorize red "Error: Cannot connect to the internet. Please check your connection." bold
-        sleep 3
-        return 1
-    fi
-
     # Download TinyVPN with better error handling
     colorize yellow "Installing GamingVPN Core..." bold
     echo
-    TMP_LOG=$(mktemp)
-    curl -L $URL -o $FILE --fail 2>$TMP_LOG
-    CURL_STATUS=$?
-    
-    if [ $CURL_STATUS -ne 0 ]; then
+    curl -L $URL -o $FILE --fail
+    if [ $? -ne 0 ]; then
         colorize red "Download failed for TinyVPN. URL: $URL" bold
-        colorize yellow "Error details:" bold
-        cat $TMP_LOG
-        rm -f $TMP_LOG
-        
-        # Additional diagnostics
-        colorize yellow "Trying to diagnose the issue..." bold
-        echo "- Checking if destination directory is writable:"
-        touch "$DEST_DIR/test_write" 2>/dev/null && rm -f "$DEST_DIR/test_write" && echo "  ✓ Directory is writable" || echo "  ✗ Directory is not writable"
-        
-        echo "- Checking network connection:"
-        ping -c 1 github.com >/dev/null 2>&1 && echo "  ✓ Network connection is working" || echo "  ✗ Network connection issue"
-        
+        sleep 2
         # Try again with verbose output for debugging
         colorize yellow "Retrying download with verbose output..." bold
         curl -L $URL -o $FILE -v
     fi
     
     if [ -f "$FILE" ]; then
-        # Check file size to ensure it's not a truncated download due to disk space
-        FILE_SIZE=$(stat -c%s "$FILE" 2>/dev/null || stat -f%z "$FILE" 2>/dev/null)
-        if [ -z "$FILE_SIZE" ] || [ "$FILE_SIZE" -lt 1000 ]; then
-            colorize red "Warning: TinyVPN file seems too small (${FILE_SIZE} bytes). Download may be incomplete." bold
-        fi
-        
         chmod +x $FILE
         if [ $? -ne 0 ]; then
             colorize red "Failed to set executable permission on $FILE" bold
-            echo "- Checking file permissions:"
-            ls -la $FILE
         fi
     else
-        colorize red "TinyVPN file not found after download attempt." bold
-        colorize yellow "Possible causes:" bold
-        echo "- Insufficient disk space"
-        echo "- Permission issues"
-        echo "- Temporary network failure"
+        colorize red "TinyVPN file not found after download attempt. Check permissions or URL." bold
     fi
     
     # Download UDP2RAW with better error handling
     colorize yellow "Installing UDP2RAW..." bold
     echo
-    TMP_LOG=$(mktemp)
-    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE --fail 2>$TMP_LOG
-    CURL_STATUS=$?
-    
-    if [ $CURL_STATUS -ne 0 ]; then
+    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE --fail
+    if [ $? -ne 0 ]; then
         colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL" bold
-        colorize yellow "Error details:" bold
-        cat $TMP_LOG
-        rm -f $TMP_LOG
-        
+        sleep 2
         # Try again with verbose output for debugging
         colorize yellow "Retrying download with verbose output..." bold
         curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
     fi
     
     if [ -f "$UDP2RAW_FILE" ]; then
-        # Check file size to ensure it's not a truncated download due to disk space
-        FILE_SIZE=$(stat -c%s "$UDP2RAW_FILE" 2>/dev/null || stat -f%z "$UDP2RAW_FILE" 2>/dev/null)
-        if [ -z "$FILE_SIZE" ] || [ "$FILE_SIZE" -lt 1000 ]; then
-            colorize red "Warning: UDP2RAW file seems too small (${FILE_SIZE} bytes). Download may be incomplete." bold
-        fi
-        
         chmod +x $UDP2RAW_FILE
         if [ $? -ne 0 ]; then
             colorize red "Failed to set executable permission on $UDP2RAW_FILE" bold
-            echo "- Checking file permissions:"
-            ls -la $UDP2RAW_FILE
         fi
     else
-        colorize red "UDP2RAW file not found after download attempt." bold
-        colorize yellow "Possible causes:" bold
-        echo "- Insufficient disk space"
-        echo "- Permission issues"
-        echo "- Temporary network failure"
+        colorize red "UDP2RAW file not found after download attempt. Check permissions or URL." bold
     fi
     
     # Check if files were installed successfully
@@ -235,17 +159,6 @@ install_gamingtunnel() {
         return 1
     else
         colorize red "Failed to install GamingVPN components...\n" bold
-        colorize yellow "Try running the script with these alternative methods:" bold
-        echo "1. Download the script first, then run:"
-        echo "   curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/gamingtunnel.sh -o gamingtunnel.sh"
-        echo "   chmod +x gamingtunnel.sh"
-        echo "   sudo ./gamingtunnel.sh"
-        echo
-        echo "2. Or use wget instead of curl:"
-        echo "   wget -q https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/gamingtunnel.sh -O gamingtunnel.sh"
-        echo "   chmod +x gamingtunnel.sh"
-        echo "   sudo ./gamingtunnel.sh"
-        sleep 3
         return 1
     fi
 }
