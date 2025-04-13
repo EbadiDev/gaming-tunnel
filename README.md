@@ -32,7 +32,7 @@ This command will download and execute the script directly with root privileges.
 
 After installation, GamingVPN uses the following directory structure:
 - `/root/gamingtunnel/` - Main installation directory
-- `/root/gamingtunnel/speederv2` - The core GamingVPN binary
+- `/root/gamingtunnel/tinyvpn` - The core GamingVPN binary
 - `/root/gamingtunnel/udp2raw` - The UDP2RAW binary for traffic encapsulation
 
 ## Usage

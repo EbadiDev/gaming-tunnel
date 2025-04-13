@@ -593,7 +593,7 @@ EOF
 	press_key
 }
 
-check_service_status(){
+check_service_status_tinyvpn(){
 	echo
     if ! [ -f "$SERVICE_FILE" ]; then
     	colorize red "GamingVPN service is not found" bold
@@ -607,7 +607,22 @@ check_service_status(){
     press_key
 }
 
-view_logs(){
+check_service_status_udp2raw(){
+	echo
+    UDP2RAW_SERVICE_FILE='/etc/systemd/system/udp2raw.service'
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    systemctl status udp2raw.service
+    
+    echo
+    press_key
+}
+
+view_logs_tinyvpn(){
 	echo
     if ! [ -f "$SERVICE_FILE" ]; then
     	colorize red "GamingVPN service is not found" bold
@@ -615,13 +630,64 @@ view_logs(){
     	return 1
     fi
     clear
-    journalctl -xeu gamingtunnel.service
+    if [ -f "/var/log/gamingtunnel.log" ]; then
+        cat /var/log/gamingtunnel.log
+    else
+        colorize yellow "Log file not found. Checking service logs..." bold
+        journalctl -xeu gamingtunnel.service
+    fi
     
     echo
-    
     press_key
-
 }
+
+view_logs_udp2raw(){
+	echo
+    UDP2RAW_SERVICE_FILE='/etc/systemd/system/udp2raw.service'
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    if [ -f "/var/log/udp2raw.log" ]; then
+        cat /var/log/udp2raw.log
+    else
+        colorize yellow "Log file not found. Checking service logs..." bold
+        journalctl -xeu udp2raw.service
+    fi
+    
+    echo
+    press_key
+}
+
+restart_service_tinyvpn(){
+	echo
+    if ! [ -f "$SERVICE_FILE" ]; then
+    	colorize red "GamingVPN service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    
+    systemctl restart gamingtunnel.service &> /dev/null
+    colorize green "GamingVPN service restarted successfully." bold
+	sleep 2
+}
+
+restart_service_udp2raw(){
+	echo
+    UDP2RAW_SERVICE_FILE='/etc/systemd/system/udp2raw.service'
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    
+    systemctl restart udp2raw.service &> /dev/null
+    colorize green "UDP2RAW service restarted successfully." bold
+	sleep 2
+}
+
 remove_service(){
 	echo
     if ! [ -f "$SERVICE_FILE" ]; then
@@ -669,19 +735,6 @@ remove_core(){
 	sleep 2
 }
 
-restart_service(){
-	echo
-    if ! [ -f "$SERVICE_FILE" ]; then
-    	colorize red "GamingVPN service is not found" bold
-    	sleep 2
-    	return 1
-    fi
-    
-    systemctl restart gamingtunnel.service &> /dev/null
-    colorize green "GamingVPN service restarted successfully." bold
-	sleep 2
-
-}
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -699,11 +752,14 @@ display_menu() {
     echo
     colorize green " 1. Configure for server" bold
     colorize cyan " 2. Configure for client" bold
-    colorize magenta " 3. Check service status" 
-    colorize yellow " 4. View logs"
-    colorize yellow " 5. Restart service" 
-    colorize red " 6. Remove service"
-    colorize red " 7. Remove core files"
+    colorize magenta " 3. Check TinyVPN service status" 
+    colorize magenta " 4. Check UDP2RAW service status" 
+    colorize yellow " 5. View TinyVPN logs"
+    colorize yellow " 6. View UDP2RAW logs"
+    colorize yellow " 7. Restart TinyVPN service" 
+    colorize yellow " 8. Restart UDP2RAW service" 
+    colorize red " 9. Remove service"
+    colorize red "10. Remove core files"
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -711,15 +767,18 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-7]: " choice
+    read -p "Enter your choice [0-10]: " choice
     case $choice in
         1) configure_server ;;
         2) configure_client ;;
-        3) check_service_status ;;
-	    4) view_logs;;
-	    5) restart_service;;
-        6) remove_service ;;
-        7) remove_core;;
+        3) check_service_status_tinyvpn ;;
+        4) check_service_status_udp2raw ;;
+	    5) view_logs_tinyvpn ;;
+	    6) view_logs_udp2raw ;;
+	    7) restart_service_tinyvpn ;;
+	    8) restart_service_udp2raw ;;
+        9) remove_service ;;
+        10) remove_core ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
