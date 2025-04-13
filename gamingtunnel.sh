@@ -146,18 +146,23 @@ install_jq() {
 # Install jq
 install_jq
 
+# Get server IP addresses
+SERVER_IPV4=$(curl -s -4 ifconfig.me 2>/dev/null || curl -s -4 ipinfo.io/ip 2>/dev/null || hostname -I | awk '{print $1}')
+SERVER_IPV6=$(curl -s -6 ifconfig.me 2>/dev/null || hostname -I | awk '{for(i=2;i<=NF;i++) if($i ~ /^[0-9a-fA-F:]+$/) {print $i; exit}}')
 
 # Fetch server country
-SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.country')
+SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$SERVER_IPV4" | jq -r '.country')
 
 # Fetch server isp 
-SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.isp')
+SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IPV4" | jq -r '.isp')
 
 # Function to display server location and IP
 display_server_info() {
     echo -e "\e[93m═════════════════════════════════════════════\e[0m"  
- 	#	Hidden for security issues   
-    echo -e "${CYAN}IP Address:${NC} $SERVER_IP"
+    echo -e "${CYAN}IPv4 Address:${NC} $SERVER_IPV4"
+    if [ -n "$SERVER_IPV6" ]; then
+        echo -e "${CYAN}IPv6 Address:${NC} $SERVER_IPV6"
+    fi
     echo -e "${CYAN}Location:${NC} $SERVER_COUNTRY "
     echo -e "${CYAN}Datacenter:${NC} $SERVER_ISP"
 }
