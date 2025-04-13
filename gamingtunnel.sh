@@ -455,20 +455,20 @@ configure_udp2raw_server(){
     colorize cyan "Configure UDP2RAW Server" bold
     echo
     
-    # Target Port (the port that TinyVPN is listening on)
-    echo -ne "[-] TinyVPN service port that UDP2RAW will connect to: "
-    read -r TARGET_PORT
-    if [ -z "$TARGET_PORT" ]; then
-        colorize red "TinyVPN port is required." bold
+    # External UDP2RAW Port (what clients connect to)
+    echo -ne "[-] UDP2RAW external listening port: "
+    read -r UDP2RAW_PORT
+    if [ -z "$UDP2RAW_PORT" ]; then
+        colorize red "UDP2RAW port is required." bold
         sleep 2
         return 1
     fi
     
-    # UDP2RAW Port
-    echo -ne "[-] UDP2RAW listening port (different from TinyVPN port): "
-    read -r UDP2RAW_PORT
-    if [ -z "$UDP2RAW_PORT" ]; then
-        colorize red "UDP2RAW port is required." bold
+    # TinyVPN Port
+    echo -ne "[-] TinyVPN service port (the port TinyVPN listens on): "
+    read -r TINYVPN_PORT
+    if [ -z "$TINYVPN_PORT" ]; then
+        colorize red "TinyVPN port is required." bold
         sleep 2
         return 1
     fi
@@ -492,8 +492,8 @@ configure_udp2raw_server(){
         UDP2RAW_MODE="faketcp"
     fi
     
-    # UDP2RAW command - fixed for server mode
-    UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_PORT} -r127.0.0.1:${TARGET_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    # UDP2RAW command - fixed for server mode with correct port order
+    UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_PORT} -r127.0.0.1:${TINYVPN_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
     
     # Show the command for troubleshooting
     colorize yellow "Using UDP2RAW command:" bold
