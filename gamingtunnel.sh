@@ -612,7 +612,7 @@ configure_udp2raw_client(){
     fi
     
     # UDP2RAW command - completely fixed to use client mode correctly
-    UDP2RAW_COMMAND="-c -l0.0.0.0:${LOCAL_PORT} -r${IP}:${REMOTE_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    UDP2RAW_COMMAND="-c -l0.0.0.0:${REMOTE_PORT} -r${IP}:${LOCAL_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
     
     # Show the command for troubleshooting
     colorize yellow "Using UDP2RAW command:" bold
