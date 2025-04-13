@@ -506,7 +506,7 @@ configure_client(){
         fi
         
         # Update the main command to use local UDP2RAW port
-        COMMAND="-c -r127.0.0.1:${UDP2RAW_LOCAL_PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --keep-reconnect --disable-obscure"
+        COMMAND="-c -r127.0.0.1:${PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --keep-reconnect --disable-obscure"
         
         # UDP2RAW command
         UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_LOCAL_PORT} -r${IP}:${PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
