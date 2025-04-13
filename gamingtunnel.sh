@@ -162,26 +162,49 @@ get_ip_addresses() {
         [[ $1 =~ ^[0-9a-fA-F:]+$ ]] && [[ $1 == *:* ]] && return 0 || return 1
     }
     
-    # Method 1: Use ip command (most reliable for most servers)
-    ipv4=$(ip -4 addr show scope global | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
-    ipv6=$(ip -6 addr show scope global | grep -oP '(?<=inet6\s)[0-9a-fA-F:]+' | head -n 1)
+    # Function to check if content is HTML/error page
+    is_html_content() {
+        [[ "$1" == *"<html"* ]] || [[ "$1" == *"<!DOCTYPE"* ]] || [[ "$1" == *"<title>"* ]] || \
+        [[ "$1" == *"Error"* ]] || [[ "$1" == *"Forbidden"* ]] || [[ "$1" == *"403"* ]]
+    }
     
-    # Method 2: Use ifconfig command if available
-    if [ -z "$ipv4" ]; then
-        if command -v ifconfig >/dev/null 2>&1; then
-            ipv4=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
-        fi
+    # Method 1: Try to get a local/internal IP first using the 'ip' command
+    if command -v ip >/dev/null 2>&1; then
+        # Get all non-loopback interfaces
+        local interfaces=$(ip -o link show | grep -v "LOOPBACK" | awk -F': ' '{print $2}')
+        
+        # Try each interface
+        for iface in $interfaces; do
+            # Try to get IPv4
+            if [ -z "$ipv4" ]; then
+                local tmp_ip=$(ip -4 addr show dev $iface 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+                if is_valid_ipv4 "$tmp_ip" && [[ ! "$tmp_ip" =~ ^127\. ]]; then
+                    ipv4="$tmp_ip"
+                fi
+            fi
+            
+            # Try to get IPv6
+            if [ -z "$ipv6" ]; then
+                local tmp_ip=$(ip -6 addr show dev $iface 2>/dev/null | grep -oP '(?<=inet6\s)[0-9a-fA-F:]+' | head -n 1)
+                if is_valid_ipv6 "$tmp_ip" && [[ "$tmp_ip" != "::1" ]]; then
+                    ipv6="$tmp_ip"
+                fi
+            fi
+        done
     fi
     
-    if [ -z "$ipv6" ]; then
-        if command -v ifconfig >/dev/null 2>&1; then
-            ipv6=$(ifconfig | grep -Eo 'inet6 (addr:)?([0-9a-fA-F:]+)' | grep -Eo '([0-9a-fA-F:]+)' | grep -v '::1' | head -n 1)
-        fi
+    # Method 2: Use ifconfig command if available and we still don't have an IP
+    if [ -z "$ipv4" ] && command -v ifconfig >/dev/null 2>&1; then
+        ipv4=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
     fi
     
-    # Method 3: Use hostname command as fallback
-    if [ -z "$ipv4" ]; then
-        local ip_list=$(hostname -I)
+    if [ -z "$ipv6" ] && command -v ifconfig >/dev/null 2>&1; then
+        ipv6=$(ifconfig | grep -Eo 'inet6 (addr:)?([0-9a-fA-F:]+)' | grep -Eo '([0-9a-fA-F:]+)' | grep -v '::1' | head -n 1)
+    fi
+    
+    # Method 3: Use hostname command
+    if [ -z "$ipv4" ] && command -v hostname >/dev/null 2>&1; then
+        local ip_list=$(hostname -I 2>/dev/null)
         for ip in $ip_list; do
             if is_valid_ipv4 "$ip" && [[ ! "$ip" =~ ^127\. ]]; then
                 ipv4="$ip"
@@ -190,8 +213,8 @@ get_ip_addresses() {
         done
     fi
     
-    if [ -z "$ipv6" ]; then
-        local ip_list=$(hostname -I)
+    if [ -z "$ipv6" ] && command -v hostname >/dev/null 2>&1; then
+        local ip_list=$(hostname -I 2>/dev/null)
         for ip in $ip_list; do
             if is_valid_ipv6 "$ip" && [[ "$ip" != "::1" ]]; then
                 ipv6="$ip"
@@ -200,25 +223,41 @@ get_ip_addresses() {
         done
     fi
     
-    # Method 4: External services as last resort - with multiple fallbacks and error checking
+    # Method 4: Try getting local routing information
+    if [ -z "$ipv4" ]; then
+        # Try to get the IP used for default routing
+        local default_iface=$(ip route | grep default | awk '{print $5}' | head -n 1)
+        if [ -n "$default_iface" ]; then
+            ipv4=$(ip -4 addr show dev $default_iface 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+        fi
+    fi
+    
+    # Method 5: External services as last resort - with multiple fallbacks and error checking
     if [ -z "$ipv4" ]; then
         # List of services to try for IPv4
         local ipv4_services=(
             "https://api.ipify.org"
+            "https://ipv4.icanhazip.com"
+            "https://v4.ident.me"
             "https://ipinfo.io/ip"
-            "https://ifconfig.me/ip"
-            "https://icanhazip.com"
-            "https://ident.me"
+            "https://ifconfig.co/ip"
+            "https://ipecho.net/plain"
             "https://myexternalip.com/raw"
+            "https://checkip.amazonaws.com"
+            "https://whatismyip.akamai.com"
         )
         
         for service in "${ipv4_services[@]}"; do
-            local result=$(curl -s -4 --max-time 5 "$service" 2>/dev/null)
+            # Use curl with user agent and accept headers to avoid 403 errors
+            local result=$(curl -s -4 --max-time 3 -A "Mozilla/5.0" -H "Accept: text/plain" "$service" 2>/dev/null)
             # Check if result is a valid IPv4 and not an HTML error page
-            if is_valid_ipv4 "$result" && [[ "$result" != *"<html"* ]] && [[ "$result" != *"<!DOCTYPE"* ]]; then
+            if is_valid_ipv4 "$result" && ! is_html_content "$result"; then
                 ipv4="$result"
                 break
             fi
+            
+            # Short sleep to avoid rate limiting
+            sleep 0.5
         done
     fi
     
@@ -226,18 +265,23 @@ get_ip_addresses() {
         # List of services to try for IPv6
         local ipv6_services=(
             "https://api6.ipify.org"
+            "https://ipv6.icanhazip.com"
+            "https://v6.ident.me"
             "https://ifconfig.co/ip"
-            "https://icanhazip.com"
-            "https://ident.me"
+            "https://checkipv6.dyndns.org"
         )
         
         for service in "${ipv6_services[@]}"; do
-            local result=$(curl -s -6 --max-time 5 "$service" 2>/dev/null)
+            # Use curl with user agent and accept headers to avoid 403 errors
+            local result=$(curl -s -6 --max-time 3 -A "Mozilla/5.0" -H "Accept: text/plain" "$service" 2>/dev/null)
             # Check if result is a valid IPv6 and not an HTML error page
-            if is_valid_ipv6 "$result" && [[ "$result" != *"<html"* ]] && [[ "$result" != *"<!DOCTYPE"* ]]; then
+            if is_valid_ipv6 "$result" && ! is_html_content "$result"; then
                 ipv6="$result"
                 break
             fi
+            
+            # Short sleep to avoid rate limiting
+            sleep 0.5
         done
     fi
     
@@ -250,17 +294,58 @@ get_ip_addresses() {
 get_ip_addresses
 
 # Fetch server country and ISP (only if IPv4 is available)
-if [ -n "$SERVER_IPV4" ] && [[ "$SERVER_IPV4" != *"<html"* ]]; then
-    SERVER_COUNTRY=$(curl -sS --max-time 5 "http://ipwhois.app/json/$SERVER_IPV4" 2>/dev/null | jq -r '.country' 2>/dev/null || echo "Unknown")
-    SERVER_ISP=$(curl -sS --max-time 5 "http://ipwhois.app/json/$SERVER_IPV4" 2>/dev/null | jq -r '.isp' 2>/dev/null || echo "Unknown")
+if [ -n "$SERVER_IPV4" ] && ! is_html_content "$SERVER_IPV4"; then
+    # Try multiple geolocation services
+    local geo_services=(
+        "http://ipwhois.app/json/$SERVER_IPV4"
+        "https://ipapi.co/$SERVER_IPV4/json/"
+        "https://ipinfo.io/$SERVER_IPV4/json"
+    )
     
-    # Check if valid responses (not HTML error pages)
-    if [[ "$SERVER_COUNTRY" == *"<html"* ]] || [[ "$SERVER_COUNTRY" == "null" ]]; then
-        SERVER_COUNTRY="Unknown"
-    fi
-    if [[ "$SERVER_ISP" == *"<html"* ]] || [[ "$SERVER_ISP" == "null" ]]; then
-        SERVER_ISP="Unknown"
-    fi
+    SERVER_COUNTRY="Unknown"
+    SERVER_ISP="Unknown"
+    
+    for service in "${geo_services[@]}"; do
+        local geo_data=$(curl -sS --max-time 3 -A "Mozilla/5.0" "$service" 2>/dev/null)
+        
+        # Skip HTML responses
+        if [[ "$geo_data" == *"<html"* ]] || [[ "$geo_data" == *"<!DOCTYPE"* ]]; then
+            continue
+        fi
+        
+        # Try to extract country first
+        if [ "$SERVER_COUNTRY" = "Unknown" ]; then
+            local country=$(echo "$geo_data" | jq -r '.country' 2>/dev/null)
+            if [ -n "$country" ] && [ "$country" != "null" ] && ! is_html_content "$country"; then
+                SERVER_COUNTRY="$country"
+            else
+                # Alternative field names
+                country=$(echo "$geo_data" | jq -r '.country_name' 2>/dev/null)
+                if [ -n "$country" ] && [ "$country" != "null" ] && ! is_html_content "$country"; then
+                    SERVER_COUNTRY="$country"
+                fi
+            fi
+        fi
+        
+        # Try to extract ISP
+        if [ "$SERVER_ISP" = "Unknown" ]; then
+            local isp=$(echo "$geo_data" | jq -r '.isp' 2>/dev/null)
+            if [ -n "$isp" ] && [ "$isp" != "null" ] && ! is_html_content "$isp"; then
+                SERVER_ISP="$isp"
+            else
+                # Alternative field names
+                isp=$(echo "$geo_data" | jq -r '.org' 2>/dev/null)
+                if [ -n "$isp" ] && [ "$isp" != "null" ] && ! is_html_content "$isp"; then
+                    SERVER_ISP="$isp"
+                fi
+            fi
+        fi
+        
+        # If we have both country and ISP, stop trying
+        if [ "$SERVER_COUNTRY" != "Unknown" ] && [ "$SERVER_ISP" != "Unknown" ]; then
+            break
+        fi
+    done
 else
     SERVER_COUNTRY="Unknown"
     SERVER_ISP="Unknown"
@@ -270,13 +355,13 @@ fi
 display_server_info() {
     echo -e "\e[93m═════════════════════════════════════════════\e[0m"  
     
-    if [ -n "$SERVER_IPV4" ] && [[ "$SERVER_IPV4" != *"<html"* ]]; then
+    if [ -n "$SERVER_IPV4" ] && ! is_html_content "$SERVER_IPV4"; then
         echo -e "${CYAN}IPv4 Address:${NC} $SERVER_IPV4"
     else
         echo -e "${CYAN}IPv4 Address:${NC} ${RED}Not detected${NC}"
     fi
     
-    if [ -n "$SERVER_IPV6" ] && [[ "$SERVER_IPV6" != *"<html"* ]]; then
+    if [ -n "$SERVER_IPV6" ] && ! is_html_content "$SERVER_IPV6"; then
         echo -e "${CYAN}IPv6 Address:${NC} $SERVER_IPV6"
     else
         if [ -z "$SERVER_IPV6" ]; then
@@ -1252,47 +1337,13 @@ display_menu() {
     echo "-------------------------------"
 }
 
-# Function to read user input
-read_option() {
-    read -p "Enter your choice [0-19]: " choice
-    case $choice in
-        1) configure_tinyvpn_server ;;
-        2) configure_tinyvpn_client ;;
-        3) configure_udp2raw_server ;;
-        4) configure_udp2raw_client ;;
-        5) check_service_status_tinyvpn ;;
-        6) check_service_status_udp2raw ;;
-	    7) view_logs_tinyvpn ;;
-	    8) view_logs_udp2raw ;;
-	    9) restart_service_tinyvpn ;;
-	    10) restart_service_udp2raw ;;
-        11) remove_tinyvpn_service ;;
-        12) remove_udp2raw_service ;;
-        13) remove_service ;;
-        14) remove_core ;;
-        15) save_config ;;
-        16) load_config ;;
-        17) list_configs ;;
-        18) delete_config ;;
-        19) create_symlink ;;
-        0) exit 0 ;;
-        *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
-    esac
-}
-
-# Main script
-while true
-do
-    display_menu
-    read_option
-done
-
-check_service_status_tinyvpn(){
-	echo
+# Service management functions
+check_service_status_tinyvpn() {
+    echo
     if ! [ -f "$SERVICE_FILE" ]; then
-    	colorize red "TinyVPN service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "TinyVPN service is not found" bold
+        sleep 2
+        return 1
     fi
     clear
     
@@ -1304,18 +1355,18 @@ check_service_status_tinyvpn(){
     fi
     
     # Show detailed status
-    systemctl status gamingtunnel.service
+    systemctl status gamingtunnel.service | cat
     
     echo
     press_key
 }
 
-check_service_status_udp2raw(){
-	echo
+check_service_status_udp2raw() {
+    echo
     if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
-    	colorize red "UDP2RAW service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "UDP2RAW service is not found" bold
+        sleep 2
+        return 1
     fi
     clear
     
@@ -1327,18 +1378,18 @@ check_service_status_udp2raw(){
     fi
     
     # Show detailed status
-    systemctl status udp2raw.service
+    systemctl status udp2raw.service | cat
     
     echo
     press_key
 }
 
-view_logs_tinyvpn(){
-	echo
+view_logs_tinyvpn() {
+    echo
     if ! [ -f "$SERVICE_FILE" ]; then
-    	colorize red "TinyVPN service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "TinyVPN service is not found" bold
+        sleep 2
+        return 1
     fi
     clear
     
@@ -1348,20 +1399,19 @@ view_logs_tinyvpn(){
     else
         colorize yellow "TinyVPN log file not found at /var/log/gamingtunnel.log" bold
         echo "Showing service journal logs instead:"
-        journalctl -xeu gamingtunnel.service --no-pager
+        journalctl -xeu gamingtunnel.service --no-pager | cat
     fi
     
     echo
-    echo -e "${YELLOW}Press 'q' to exit${NC}"
-    read -p "Press any key to continue..." -n 1
+    press_key
 }
 
-view_logs_udp2raw(){
-	echo
+view_logs_udp2raw() {
+    echo
     if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
-    	colorize red "UDP2RAW service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "UDP2RAW service is not found" bold
+        sleep 2
+        return 1
     fi
     clear
     
@@ -1371,20 +1421,19 @@ view_logs_udp2raw(){
     else
         colorize yellow "UDP2RAW log file not found at /var/log/udp2raw.log" bold
         echo "Showing service journal logs instead:"
-        journalctl -xeu udp2raw.service --no-pager
+        journalctl -xeu udp2raw.service --no-pager | cat
     fi
     
     echo
-    echo -e "${YELLOW}Press 'q' to exit${NC}"
-    read -p "Press any key to continue..." -n 1
+    press_key
 }
 
-restart_service_tinyvpn(){
-	echo
+restart_service_tinyvpn() {
+    echo
     if ! [ -f "$SERVICE_FILE" ]; then
-    	colorize red "TinyVPN service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "TinyVPN service is not found" bold
+        sleep 2
+        return 1
     fi
     
     systemctl restart gamingtunnel.service &> /dev/null
@@ -1393,15 +1442,16 @@ restart_service_tinyvpn(){
     else
         colorize red "Failed to restart TinyVPN service. Check logs for details." bold
     fi
-	sleep 2
+    sleep 2
+    press_key
 }
 
-restart_service_udp2raw(){
-	echo
+restart_service_udp2raw() {
+    echo
     if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
-    	colorize red "UDP2RAW service is not found" bold
-    	sleep 2
-    	return 1
+        colorize red "UDP2RAW service is not found" bold
+        sleep 2
+        return 1
     fi
     
     systemctl restart udp2raw.service &> /dev/null
@@ -1410,5 +1460,41 @@ restart_service_udp2raw(){
     else
         colorize red "Failed to restart UDP2RAW service. Check logs for details." bold
     fi
-	sleep 2
+    sleep 2
+    press_key
 }
+
+# Function to read user input
+read_option() {
+    read -p "Enter your choice [0-19]: " choice
+    case $choice in
+        1) configure_tinyvpn_server ;;
+        2) configure_tinyvpn_client ;;
+        3) configure_udp2raw_server ;;
+        4) configure_udp2raw_client ;;
+        5) check_service_status_tinyvpn ;;
+        6) check_service_status_udp2raw ;;
+        7) view_logs_tinyvpn ;;
+        8) view_logs_udp2raw ;;
+        9) restart_service_tinyvpn ;;
+        10) restart_service_udp2raw ;;
+        11) remove_tinyvpn_service ;;
+        12) remove_udp2raw_service ;;
+        13) remove_service ;;
+        14) remove_core ;;
+        15) save_config ;;
+        16) load_config ;;
+        17) list_configs ;;
+        18) delete_config ;;
+        19) create_symlink ;;
+        0) exit 0 ;;
+        *) echo -e "${RED}Invalid option!${NC}" && sleep 1 ;;
+    esac
+}
+
+# Main script
+while true
+do
+    display_menu
+    read_option
+done
