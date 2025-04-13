@@ -64,6 +64,7 @@ colorize() {
 install_gamingtunnel() {
     # Define the directory and files
     DEST_DIR="/root/gamingtunnel"
+    CONFIG_DIR="/root/gamingtunnel"
     FILE="/root/gamingtunnel/speederv2"
     UDP2RAW_FILE="/root/gamingtunnel/udp2raw"
     URL_X86="https://github.com/ebadidev/gaming-tunnel/raw/main/core/speederv2_amd64"
@@ -105,9 +106,6 @@ install_gamingtunnel() {
     echo
     curl -L $UDP2RAW_URL -o $UDP2RAW_FILE &> /dev/null
     chmod +x $UDP2RAW_FILE
-    
-    # Create symbolic link to gamingtunnel
-    ln -sf "$FILE" "$CONFIG_DIR/gamingtunnel" &> /dev/null
     
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core and UDP2RAW installed successfully...\n" bold
@@ -168,7 +166,7 @@ CONFIG_DIR='/root/gamingtunnel'
 SERVICE_FILE='/etc/systemd/system/gamingtunnel.service'
 # Function to display Rathole Core installation status
 display_gamingtunnel_status() {
-    if [[ -f "${CONFIG_DIR}/gamingtunnel" ]]; then
+    if [[ -f "${CONFIG_DIR}/speederv2" ]]; then
         echo -e "${CYAN}GamingVPN:${NC} ${GREEN}Installed${NC}"
     else
         echo -e "${CYAN}GamingVPN:${NC} ${RED}Not installed${NC}"
@@ -255,7 +253,7 @@ configure_server(){
     fi
     
     # Final command
-    COMMAND="-s -l[::]:$PORT $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gamingtunnel --disable-obscure"
+    COMMAND="-s -l[::]:$PORT $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --disable-obscure"
     
     echo
     colorize cyan "Configure UDP2RAW for server" bold
@@ -330,7 +328,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$CONFIG_DIR/gamingtunnel $COMMAND
+ExecStart=$CONFIG_DIR/speederv2 $COMMAND
 Restart=always
 RestartSec=3
 
@@ -437,7 +435,7 @@ configure_client(){
     fi
     
     # Final command
-    COMMAND="-c -r${IP}:${PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gamingtunnel --keep-reconnect --disable-obscure"
+    COMMAND="-c -r${IP}:${PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --keep-reconnect --disable-obscure"
 
     echo
     colorize cyan "Configure UDP2RAW for client" bold
@@ -477,7 +475,7 @@ configure_client(){
         fi
         
         # Update the main command to use local UDP2RAW port
-        COMMAND="-c -r127.0.0.1:${UDP2RAW_LOCAL_PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gamingtunnel --keep-reconnect --disable-obscure"
+        COMMAND="-c -r127.0.0.1:${UDP2RAW_LOCAL_PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --keep-reconnect --disable-obscure"
         
         # UDP2RAW command
         UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_LOCAL_PORT} -r${IP}:${PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
@@ -515,7 +513,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$CONFIG_DIR/gamingtunnel $COMMAND
+ExecStart=$CONFIG_DIR/speederv2 $COMMAND
 Restart=always
 RestartSec=3
 
