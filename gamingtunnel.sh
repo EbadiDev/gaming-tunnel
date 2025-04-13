@@ -73,23 +73,58 @@ install_gamingtunnel() {
     URL_UDP2RAW_ARM="https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_arm"
       
     echo
+    echo "DEBUG: Current user is $(whoami)"
+    echo "DEBUG: Current directory is $(pwd)"
+    
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core installed already." bold
         return 1
     fi
     
-    # Make sure the destination directory exists
-    if ! [ -d "$DEST_DIR" ]; then
-        mkdir -p "$DEST_DIR" &> /dev/null
+    # Make sure the destination directory exists - with verbose output
+    echo "DEBUG: Checking if directory $DEST_DIR exists"
+    if [ -d "$DEST_DIR" ]; then
+        echo "DEBUG: Directory $DEST_DIR exists"
+    else
+        echo "DEBUG: Creating directory $DEST_DIR"
+        mkdir -p "$DEST_DIR"
+        if [ $? -ne 0 ]; then
+            echo "DEBUG: Failed to create directory with exit code $?"
+            echo "DEBUG: Trying with sudo..."
+            sudo mkdir -p "$DEST_DIR"
+            if [ $? -ne 0 ]; then
+                colorize red "Failed to create directory $DEST_DIR even with sudo. Check permissions." bold
+                sleep 2
+                return 1
+            fi
+        fi
+        
+        echo "DEBUG: Checking if directory creation was successful"
         if ! [ -d "$DEST_DIR" ]; then
-            colorize red "Failed to create directory $DEST_DIR. Check permissions." bold
+            colorize red "Failed to create directory $DEST_DIR. Directory does not exist after creation attempt." bold
             sleep 2
             return 1
+        else
+            echo "DEBUG: Directory $DEST_DIR created successfully"
         fi
+    fi
+    
+    # Test directory writability
+    echo "DEBUG: Testing directory writability"
+    touch "$DEST_DIR/test_write"
+    if [ $? -ne 0 ]; then
+        echo "DEBUG: Directory is not writable"
+        colorize red "Directory $DEST_DIR is not writable. Check permissions." bold
+        sleep 2
+        return 1
+    else
+        echo "DEBUG: Directory is writable"
+        rm -f "$DEST_DIR/test_write"
     fi
     
     # Detect the system architecture
     ARCH=$(uname -m)
+    echo "DEBUG: System architecture is $ARCH"
     if [ "$ARCH" = "x86_64" ]; then
         URL=$URL_X86
         UDP2RAW_URL=$URL_UDP2RAW
@@ -102,49 +137,70 @@ install_gamingtunnel() {
         return 1
     fi
 
-    # Download TinyVPN with better error handling
+    # Download TinyVPN with better error handling and verbose output
     colorize yellow "Installing GamingVPN Core..." bold
-    echo
-    curl -L $URL -o $FILE --fail
-    if [ $? -ne 0 ]; then
-        colorize red "Download failed for TinyVPN. URL: $URL" bold
-        sleep 2
-        # Try again with verbose output for debugging
-        colorize yellow "Retrying download with verbose output..." bold
-        curl -L $URL -o $FILE -v
+    echo "DEBUG: Downloading from $URL to $FILE"
+    curl -L $URL -o $FILE -v
+    CURL_EXIT_CODE=$?
+    
+    echo "DEBUG: curl exit code: $CURL_EXIT_CODE"
+    if [ $CURL_EXIT_CODE -ne 0 ]; then
+        colorize red "Download failed for TinyVPN. URL: $URL with exit code $CURL_EXIT_CODE" bold
+        echo "DEBUG: Trying with sudo..."
+        sudo curl -L $URL -o $FILE -v
+        CURL_EXIT_CODE=$?
+        echo "DEBUG: sudo curl exit code: $CURL_EXIT_CODE"
     fi
     
+    echo "DEBUG: Checking if file $FILE exists"
     if [ -f "$FILE" ]; then
+        echo "DEBUG: File $FILE exists, setting executable permissions"
         chmod +x $FILE
         if [ $? -ne 0 ]; then
-            colorize red "Failed to set executable permission on $FILE" bold
+            echo "DEBUG: chmod failed, trying with sudo"
+            sudo chmod +x $FILE
+            if [ $? -ne 0 ]; then
+                colorize red "Failed to set executable permission on $FILE even with sudo" bold
+            fi
         fi
     else
+        echo "DEBUG: File $FILE does not exist after download"
         colorize red "TinyVPN file not found after download attempt. Check permissions or URL." bold
     fi
     
-    # Download UDP2RAW with better error handling
+    # Download UDP2RAW with better error handling and verbose output
     colorize yellow "Installing UDP2RAW..." bold
-    echo
-    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE --fail
-    if [ $? -ne 0 ]; then
-        colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL" bold
-        sleep 2
-        # Try again with verbose output for debugging
-        colorize yellow "Retrying download with verbose output..." bold
-        curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
+    echo "DEBUG: Downloading from $UDP2RAW_URL to $UDP2RAW_FILE"
+    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
+    CURL_EXIT_CODE=$?
+    
+    echo "DEBUG: curl exit code: $CURL_EXIT_CODE"
+    if [ $CURL_EXIT_CODE -ne 0 ]; then
+        colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL with exit code $CURL_EXIT_CODE" bold
+        echo "DEBUG: Trying with sudo..."
+        sudo curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
+        CURL_EXIT_CODE=$?
+        echo "DEBUG: sudo curl exit code: $CURL_EXIT_CODE"
     fi
     
+    echo "DEBUG: Checking if file $UDP2RAW_FILE exists"
     if [ -f "$UDP2RAW_FILE" ]; then
+        echo "DEBUG: File $UDP2RAW_FILE exists, setting executable permissions"
         chmod +x $UDP2RAW_FILE
         if [ $? -ne 0 ]; then
-            colorize red "Failed to set executable permission on $UDP2RAW_FILE" bold
+            echo "DEBUG: chmod failed, trying with sudo"
+            sudo chmod +x $UDP2RAW_FILE
+            if [ $? -ne 0 ]; then
+                colorize red "Failed to set executable permission on $UDP2RAW_FILE even with sudo" bold
+            fi
         fi
     else
+        echo "DEBUG: File $UDP2RAW_FILE does not exist after download"
         colorize red "UDP2RAW file not found after download attempt. Check permissions or URL." bold
     fi
     
     # Check if files were installed successfully
+    echo "DEBUG: Final check for installed files"
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core and UDP2RAW installed successfully...\n" bold
         sleep 1
