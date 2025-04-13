@@ -146,23 +146,146 @@ install_jq() {
 # Install jq
 install_jq
 
-# Get server IP addresses
-SERVER_IPV4=$(curl -s -4 ifconfig.me 2>/dev/null || curl -s -4 ipinfo.io/ip 2>/dev/null || hostname -I | awk '{print $1}')
-SERVER_IPV6=$(curl -s -6 ifconfig.me 2>/dev/null || hostname -I | awk '{for(i=2;i<=NF;i++) if($i ~ /^[0-9a-fA-F:]+$/) {print $i; exit}}')
+# Get server IP addresses - using more robust methods
+get_ip_addresses() {
+    # Initialize variables
+    local ipv4=""
+    local ipv6=""
+    
+    # Function to validate IPv4 address
+    is_valid_ipv4() {
+        [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0 || return 1
+    }
+    
+    # Function to validate IPv6 address (basic check)
+    is_valid_ipv6() {
+        [[ $1 =~ ^[0-9a-fA-F:]+$ ]] && [[ $1 == *:* ]] && return 0 || return 1
+    }
+    
+    # Method 1: Use ip command (most reliable for most servers)
+    ipv4=$(ip -4 addr show scope global | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+    ipv6=$(ip -6 addr show scope global | grep -oP '(?<=inet6\s)[0-9a-fA-F:]+' | head -n 1)
+    
+    # Method 2: Use ifconfig command if available
+    if [ -z "$ipv4" ]; then
+        if command -v ifconfig >/dev/null 2>&1; then
+            ipv4=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
+        fi
+    fi
+    
+    if [ -z "$ipv6" ]; then
+        if command -v ifconfig >/dev/null 2>&1; then
+            ipv6=$(ifconfig | grep -Eo 'inet6 (addr:)?([0-9a-fA-F:]+)' | grep -Eo '([0-9a-fA-F:]+)' | grep -v '::1' | head -n 1)
+        fi
+    fi
+    
+    # Method 3: Use hostname command as fallback
+    if [ -z "$ipv4" ]; then
+        local ip_list=$(hostname -I)
+        for ip in $ip_list; do
+            if is_valid_ipv4 "$ip" && [[ ! "$ip" =~ ^127\. ]]; then
+                ipv4="$ip"
+                break
+            fi
+        done
+    fi
+    
+    if [ -z "$ipv6" ]; then
+        local ip_list=$(hostname -I)
+        for ip in $ip_list; do
+            if is_valid_ipv6 "$ip" && [[ "$ip" != "::1" ]]; then
+                ipv6="$ip"
+                break
+            fi
+        done
+    fi
+    
+    # Method 4: External services as last resort - with multiple fallbacks and error checking
+    if [ -z "$ipv4" ]; then
+        # List of services to try for IPv4
+        local ipv4_services=(
+            "https://api.ipify.org"
+            "https://ipinfo.io/ip"
+            "https://ifconfig.me/ip"
+            "https://icanhazip.com"
+            "https://ident.me"
+            "https://myexternalip.com/raw"
+        )
+        
+        for service in "${ipv4_services[@]}"; do
+            local result=$(curl -s -4 --max-time 5 "$service" 2>/dev/null)
+            # Check if result is a valid IPv4 and not an HTML error page
+            if is_valid_ipv4 "$result" && [[ "$result" != *"<html"* ]] && [[ "$result" != *"<!DOCTYPE"* ]]; then
+                ipv4="$result"
+                break
+            fi
+        done
+    fi
+    
+    if [ -z "$ipv6" ]; then
+        # List of services to try for IPv6
+        local ipv6_services=(
+            "https://api6.ipify.org"
+            "https://ifconfig.co/ip"
+            "https://icanhazip.com"
+            "https://ident.me"
+        )
+        
+        for service in "${ipv6_services[@]}"; do
+            local result=$(curl -s -6 --max-time 5 "$service" 2>/dev/null)
+            # Check if result is a valid IPv6 and not an HTML error page
+            if is_valid_ipv6 "$result" && [[ "$result" != *"<html"* ]] && [[ "$result" != *"<!DOCTYPE"* ]]; then
+                ipv6="$result"
+                break
+            fi
+        done
+    fi
+    
+    # Assign the detected IP addresses to global variables
+    SERVER_IPV4="$ipv4"
+    SERVER_IPV6="$ipv6"
+}
 
-# Fetch server country
-SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$SERVER_IPV4" | jq -r '.country')
+# Initialize IP addresses
+get_ip_addresses
 
-# Fetch server isp 
-SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IPV4" | jq -r '.isp')
+# Fetch server country and ISP (only if IPv4 is available)
+if [ -n "$SERVER_IPV4" ] && [[ "$SERVER_IPV4" != *"<html"* ]]; then
+    SERVER_COUNTRY=$(curl -sS --max-time 5 "http://ipwhois.app/json/$SERVER_IPV4" 2>/dev/null | jq -r '.country' 2>/dev/null || echo "Unknown")
+    SERVER_ISP=$(curl -sS --max-time 5 "http://ipwhois.app/json/$SERVER_IPV4" 2>/dev/null | jq -r '.isp' 2>/dev/null || echo "Unknown")
+    
+    # Check if valid responses (not HTML error pages)
+    if [[ "$SERVER_COUNTRY" == *"<html"* ]] || [[ "$SERVER_COUNTRY" == "null" ]]; then
+        SERVER_COUNTRY="Unknown"
+    fi
+    if [[ "$SERVER_ISP" == *"<html"* ]] || [[ "$SERVER_ISP" == "null" ]]; then
+        SERVER_ISP="Unknown"
+    fi
+else
+    SERVER_COUNTRY="Unknown"
+    SERVER_ISP="Unknown"
+fi
 
 # Function to display server location and IP
 display_server_info() {
     echo -e "\e[93m═════════════════════════════════════════════\e[0m"  
-    echo -e "${CYAN}IPv4 Address:${NC} $SERVER_IPV4"
-    if [ -n "$SERVER_IPV6" ]; then
-        echo -e "${CYAN}IPv6 Address:${NC} $SERVER_IPV6"
+    
+    if [ -n "$SERVER_IPV4" ] && [[ "$SERVER_IPV4" != *"<html"* ]]; then
+        echo -e "${CYAN}IPv4 Address:${NC} $SERVER_IPV4"
+    else
+        echo -e "${CYAN}IPv4 Address:${NC} ${RED}Not detected${NC}"
     fi
+    
+    if [ -n "$SERVER_IPV6" ] && [[ "$SERVER_IPV6" != *"<html"* ]]; then
+        echo -e "${CYAN}IPv6 Address:${NC} $SERVER_IPV6"
+    else
+        if [ -z "$SERVER_IPV6" ]; then
+            echo -e "${CYAN}IPv6 Address:${NC} ${YELLOW}Not available${NC}"
+        else
+            echo -e "${CYAN}IPv6 Address:${NC} ${RED}Not detected${NC}"
+        fi
+    fi
+    
     echo -e "${CYAN}Location:${NC} $SERVER_COUNTRY "
     echo -e "${CYAN}Datacenter:${NC} $SERVER_ISP"
 }
@@ -1163,3 +1286,129 @@ do
     display_menu
     read_option
 done
+
+check_service_status_tinyvpn(){
+	echo
+    if ! [ -f "$SERVICE_FILE" ]; then
+    	colorize red "TinyVPN service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    
+    # First check if service exists
+    if ! systemctl --all --type=service | grep -q "gamingtunnel.service"; then
+        colorize red "TinyVPN service is not registered in systemd" bold
+        sleep 2
+        return 1
+    fi
+    
+    # Show detailed status
+    systemctl status gamingtunnel.service
+    
+    echo
+    press_key
+}
+
+check_service_status_udp2raw(){
+	echo
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    
+    # First check if service exists
+    if ! systemctl --all --type=service | grep -q "udp2raw.service"; then
+        colorize red "UDP2RAW service is not registered in systemd" bold
+        sleep 2
+        return 1
+    fi
+    
+    # Show detailed status
+    systemctl status udp2raw.service
+    
+    echo
+    press_key
+}
+
+view_logs_tinyvpn(){
+	echo
+    if ! [ -f "$SERVICE_FILE" ]; then
+    	colorize red "TinyVPN service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    
+    if [ -f "/var/log/gamingtunnel.log" ]; then
+        echo -e "${CYAN}TinyVPN Log:${NC}\n"
+        cat /var/log/gamingtunnel.log
+    else
+        colorize yellow "TinyVPN log file not found at /var/log/gamingtunnel.log" bold
+        echo "Showing service journal logs instead:"
+        journalctl -xeu gamingtunnel.service --no-pager
+    fi
+    
+    echo
+    echo -e "${YELLOW}Press 'q' to exit${NC}"
+    read -p "Press any key to continue..." -n 1
+}
+
+view_logs_udp2raw(){
+	echo
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    clear
+    
+    if [ -f "/var/log/udp2raw.log" ]; then
+        echo -e "${CYAN}UDP2RAW Log:${NC}\n"
+        cat /var/log/udp2raw.log
+    else
+        colorize yellow "UDP2RAW log file not found at /var/log/udp2raw.log" bold
+        echo "Showing service journal logs instead:"
+        journalctl -xeu udp2raw.service --no-pager
+    fi
+    
+    echo
+    echo -e "${YELLOW}Press 'q' to exit${NC}"
+    read -p "Press any key to continue..." -n 1
+}
+
+restart_service_tinyvpn(){
+	echo
+    if ! [ -f "$SERVICE_FILE" ]; then
+    	colorize red "TinyVPN service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    
+    systemctl restart gamingtunnel.service &> /dev/null
+    if systemctl is-active --quiet gamingtunnel; then
+        colorize green "TinyVPN service restarted successfully." bold
+    else
+        colorize red "Failed to restart TinyVPN service. Check logs for details." bold
+    fi
+	sleep 2
+}
+
+restart_service_udp2raw(){
+	echo
+    if ! [ -f "$UDP2RAW_SERVICE_FILE" ]; then
+    	colorize red "UDP2RAW service is not found" bold
+    	sleep 2
+    	return 1
+    fi
+    
+    systemctl restart udp2raw.service &> /dev/null
+    if systemctl is-active --quiet udp2raw; then
+        colorize green "UDP2RAW service restarted successfully." bold
+    else
+        colorize red "Failed to restart UDP2RAW service. Check logs for details." bold
+    fi
+	sleep 2
+}
