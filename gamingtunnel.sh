@@ -65,10 +65,10 @@ install_gamingtunnel() {
     # Define the directory and files
     DEST_DIR="/root/gamingtunnel"
     CONFIG_DIR="/root/gamingtunnel"
-    FILE="/root/gamingtunnel/speederv2"
+    FILE="/root/gamingtunnel/tinyvpn"
     UDP2RAW_FILE="/root/gamingtunnel/udp2raw"
-    URL_X86="https://github.com/ebadidev/gaming-tunnel/raw/main/core/speederv2_amd64"
-    URL_ARM="https://github.com/ebadidev/gaming-tunnel/raw/main/core/speederv2_arm"       
+    URL_X86="https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_amd64"
+    URL_ARM="https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_arm"       
     URL_UDP2RAW="https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_amd64"
     URL_UDP2RAW_ARM="https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_arm"
       
@@ -166,7 +166,7 @@ CONFIG_DIR='/root/gamingtunnel'
 SERVICE_FILE='/etc/systemd/system/gamingtunnel.service'
 # Function to display Rathole Core installation status
 display_gamingtunnel_status() {
-    if [[ -f "${CONFIG_DIR}/speederv2" ]]; then
+    if [[ -f "${CONFIG_DIR}/tinyvpn" ]]; then
         echo -e "${CYAN}GamingVPN:${NC} ${GREEN}Installed${NC}"
     else
         echo -e "${CYAN}GamingVPN:${NC} ${RED}Not installed${NC}"
@@ -340,7 +340,7 @@ Wants=network.target
 [Service]
 Type=simple
 WorkingDirectory=$CONFIG_DIR
-ExecStart=$CONFIG_DIR/speederv2 $COMMAND
+ExecStart=$CONFIG_DIR/tinyvpn $COMMAND
 Restart=always
 RestartSec=1
 LimitNOFILE=infinity
@@ -556,7 +556,7 @@ Wants=network.target
 [Service]
 Type=simple
 WorkingDirectory=$CONFIG_DIR
-ExecStart=$CONFIG_DIR/speederv2 $COMMAND
+ExecStart=$CONFIG_DIR/tinyvpn $COMMAND
 Restart=always
 RestartSec=1
 LimitNOFILE=infinity
