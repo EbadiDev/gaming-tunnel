@@ -252,6 +252,28 @@ configure_tinyvpn_server(){
         PORT=4096
     fi
     
+    # Check if port is already in use
+    if command -v ss &> /dev/null; then
+        # Using ss command (newer systems)
+        PORT_CHECK=$(ss -tuln | grep ":$PORT ")
+    elif command -v netstat &> /dev/null; then
+        # Using netstat command (older systems)
+        PORT_CHECK=$(netstat -tuln | grep ":$PORT ")
+    else
+        # If neither command is available, use a less reliable method
+        PORT_CHECK=$(lsof -i:$PORT 2>/dev/null)
+    fi
+    
+    if [ -n "$PORT_CHECK" ]; then
+        colorize red "ERROR: Port $PORT is already in use!" bold
+        colorize yellow "Please choose a different port number." bold
+        echo
+        echo "$PORT_CHECK"
+        echo
+        sleep 2
+        return 1
+    fi
+    
     echo
     
     # FEC Value
