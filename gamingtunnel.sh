@@ -506,7 +506,7 @@ configure_client(){
         fi
         
         # UDP2RAW command
-        UDP2RAW_COMMAND="-s -l0.0.0.0:${PORT} -r127.0.0.1:${UDP2RAW_LOCAL_PORT}} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+        UDP2RAW_COMMAND="-s -l0.0.0.0:${PORT} -r127.0.0.1:${UDP2RAW_LOCAL_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
         
         # Create the UDP2RAW service file
         UDP2RAW_SERVICE_FILE='/etc/systemd/system/udp2raw.service'
