@@ -493,7 +493,7 @@ configure_udp2raw_server(){
     fi
     
     # UDP2RAW command - fixed for server mode with correct port order
-    UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_PORT} -r127.0.0.1:${TINYVPN_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    UDP2RAW_COMMAND="-s -l0.0.0.0:${TINYVPN_PORT} -r127.0.0.1:${UDP2RAW_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
     
     # Show the command for troubleshooting
     colorize yellow "Using UDP2RAW command:" bold
