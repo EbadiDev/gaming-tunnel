@@ -157,7 +157,7 @@ SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.isp')
 display_server_info() {
     echo -e "\e[93m═════════════════════════════════════════════\e[0m"  
  	#	Hidden for security issues   
-    #echo -e "${CYAN}IP Address:${NC} $SERVER_IP"
+    echo -e "${CYAN}IP Address:${NC} $SERVER_IP"
     echo -e "${CYAN}Location:${NC} $SERVER_COUNTRY "
     echo -e "${CYAN}Datacenter:${NC} $SERVER_ISP"
 }
@@ -506,7 +506,7 @@ configure_client(){
         fi
         
         # UDP2RAW command
-        UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_LOCAL_PORT} -r${IP}:${PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+        UDP2RAW_COMMAND="-s -l0.0.0.0:${PORT} -r127.0.0.1:${UDP2RAW_LOCAL_PORT}} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
         
         # Create the UDP2RAW service file
         UDP2RAW_SERVICE_FILE='/etc/systemd/system/udp2raw.service'
@@ -732,6 +732,40 @@ remove_core(){
 	sleep 2
 }
 
+create_symlink() {
+    local SYMLINK_PATH="/usr/local/bin/gamingtunnel"
+    local SCRIPT_PATH="$(realpath $0)"
+    
+    echo
+    if [ -L "$SYMLINK_PATH" ]; then
+        colorize yellow "Symlink already exists at $SYMLINK_PATH" bold
+        
+        # Check if it's pointing to the current script
+        local CURRENT_TARGET="$(readlink $SYMLINK_PATH)"
+        if [ "$CURRENT_TARGET" != "$SCRIPT_PATH" ]; then
+            echo -ne "[-] Update symlink to point to current script? (y/n): "
+            read -r UPDATE_SYMLINK
+            if [[ "$UPDATE_SYMLINK" == "y" || "$UPDATE_SYMLINK" == "Y" ]]; then
+                rm -f "$SYMLINK_PATH"
+                ln -s "$SCRIPT_PATH" "$SYMLINK_PATH"
+                colorize green "Symlink updated. You can now run 'gamingtunnel' from anywhere." bold
+            fi
+        else
+            colorize green "Symlink is already pointing to the current script." bold
+        fi
+    else
+        ln -s "$SCRIPT_PATH" "$SYMLINK_PATH"
+        if [ -L "$SYMLINK_PATH" ]; then
+            colorize green "Symlink created successfully. You can now run 'gamingtunnel' from anywhere." bold
+        else
+            colorize red "Failed to create symlink." bold
+        fi
+    fi
+    
+    echo
+    press_key
+}
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -757,6 +791,7 @@ display_menu() {
     colorize yellow " 8. Restart UDP2RAW service" 
     colorize red " 9. Remove service"
     colorize red "10. Remove core files"
+    colorize cyan "11. Create symlink to script" bold
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -764,7 +799,7 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-10]: " choice
+    read -p "Enter your choice [0-11]: " choice
     case $choice in
         1) configure_server ;;
         2) configure_client ;;
@@ -776,6 +811,7 @@ read_option() {
 	    8) restart_service_udp2raw ;;
         9) remove_service ;;
         10) remove_core ;;
+        11) create_symlink ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
