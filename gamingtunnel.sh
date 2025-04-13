@@ -492,9 +492,14 @@ configure_udp2raw_server(){
         UDP2RAW_MODE="faketcp"
     fi
     
-    # UDP2RAW command
-    UDP2RAW_COMMAND="-s -l0.0.0.0:${LOCAL_PORT} -r${IP}:${REMOTE_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
-
+    # UDP2RAW command - fixed for server mode
+    UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_PORT} -r127.0.0.1:${TARGET_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    
+    # Show the command for troubleshooting
+    colorize yellow "Using UDP2RAW command:" bold
+    echo "$UDP2RAW_COMMAND"
+    echo
+    
     # Create the UDP2RAW service file
     cat << EOF > "$UDP2RAW_SERVICE_FILE"
 [Unit]
@@ -534,6 +539,8 @@ EOF
             tail -n 10 /var/log/udp2raw.error.log
         fi
         colorize yellow "For more details, check: /var/log/udp2raw.log and /var/log/udp2raw.error.log" bold
+        colorize yellow "Try running the command manually to see errors:" bold
+        echo "$CONFIG_DIR/udp2raw $UDP2RAW_COMMAND"
     else
         colorize green "UDP2RAW server configured and started successfully." bold
     fi
@@ -604,8 +611,14 @@ configure_udp2raw_client(){
         UDP2RAW_MODE="faketcp"
     fi
     
-    # UDP2RAW command
-    UDP2RAW_COMMAND="-c -l0.0.0.0:${UDP2RAW_PORT} -r${IP}:${TARGET_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    # UDP2RAW command - completely fixed to use client mode correctly
+    UDP2RAW_COMMAND="-c -l0.0.0.0:${LOCAL_PORT} -r${IP}:${REMOTE_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    
+    # Show the command for troubleshooting
+    colorize yellow "Using UDP2RAW command:" bold
+    echo "$UDP2RAW_COMMAND"
+    echo
+    
     # Create the UDP2RAW service file
     cat << EOF > "$UDP2RAW_SERVICE_FILE"
 [Unit]
@@ -645,6 +658,8 @@ EOF
             tail -n 10 /var/log/udp2raw.error.log
         fi
         colorize yellow "For more details, check: /var/log/udp2raw.log and /var/log/udp2raw.error.log" bold
+        colorize yellow "Try running the command manually to see errors:" bold
+        echo "$CONFIG_DIR/udp2raw $UDP2RAW_COMMAND"
     else
         colorize green "UDP2RAW client configured and started successfully." bold
     fi
