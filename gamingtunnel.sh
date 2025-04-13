@@ -493,8 +493,8 @@ configure_udp2raw_server(){
     fi
     
     # UDP2RAW command
-    UDP2RAW_COMMAND="-c -l0.0.0.0:${UDP2RAW_PORT} -r10.22.22.2:${TARGET_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
-    
+    UDP2RAW_COMMAND="-s -l0.0.0.0:${LOCAL_PORT} -r${IP}:${REMOTE_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+
     # Create the UDP2RAW service file
     cat << EOF > "$UDP2RAW_SERVICE_FILE"
 [Unit]
@@ -605,8 +605,7 @@ configure_udp2raw_client(){
     fi
     
     # UDP2RAW command
-    UDP2RAW_COMMAND="-s -l0.0.0.0:${LOCAL_PORT} -r${IP}:${REMOTE_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
-    
+    UDP2RAW_COMMAND="-c -l0.0.0.0:${UDP2RAW_PORT} -r${IP}:${TARGET_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
     # Create the UDP2RAW service file
     cat << EOF > "$UDP2RAW_SERVICE_FILE"
 [Unit]
