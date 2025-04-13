@@ -575,20 +575,20 @@ configure_udp2raw_client(){
         return 1
     fi
     
-    # Local port for TinyVPN to connect to
-    echo -ne "[-] Local port for TinyVPN to connect to: "
-    read -r LOCAL_TUN_PORT
-    if [ -z "$LOCAL_TUN_PORT" ]; then
-        colorize red "Local tunnel port is required." bold
+    # Local UDP2RAW listening port
+    echo -ne "[-] Local UDP2RAW listening port: "
+    read -r LOCAL_UDP2RAW_PORT
+    if [ -z "$LOCAL_UDP2RAW_PORT" ]; then
+        colorize red "Local UDP2RAW listening port is required." bold
         sleep 2
         return 1
     fi
     
-    # Remote UDP2RAW port on server
-    echo -ne "[-] Remote UDP2RAW port on the server: "
-    read -r REMOTE_UDP2RAW_PORT
-    if [ -z "$REMOTE_UDP2RAW_PORT" ]; then
-        colorize red "Remote UDP2RAW port is required." bold
+    # Remote TinyVPN port on server
+    echo -ne "[-] Remote TinyVPN port on the server: "
+    read -r REMOTE_TINYVPN_PORT
+    if [ -z "$REMOTE_TINYVPN_PORT" ]; then
+        colorize red "Remote TinyVPN port is required." bold
         sleep 2
         return 1
     fi
@@ -612,8 +612,8 @@ configure_udp2raw_client(){
         UDP2RAW_MODE="faketcp"
     fi
     
-    # UDP2RAW client command with correct port order
-    UDP2RAW_COMMAND="-c -l0.0.0.0:${LOCAL_TUN_PORT} -r${SERVER_IP}:${REMOTE_UDP2RAW_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
+    # UDP2RAW client command with CORRECT port order
+    UDP2RAW_COMMAND="-c -l0.0.0.0:${LOCAL_UDP2RAW_PORT} -r${SERVER_IP}:${REMOTE_TINYVPN_PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
     
     # Show the command for troubleshooting
     colorize yellow "Using UDP2RAW command:" bold
@@ -666,9 +666,9 @@ EOF
     fi
     
     echo
-    colorize yellow "NOTE: Configure TinyVPN to connect to 127.0.0.1:${LOCAL_TUN_PORT} to use this UDP2RAW tunnel" bold
+    colorize yellow "NOTE: Configure TinyVPN to connect to 127.0.0.1:${LOCAL_UDP2RAW_PORT} to use this UDP2RAW tunnel" bold
     echo
-    colorize yellow "The UDP2RAW client is listening on port ${LOCAL_TUN_PORT} and connecting to the server at ${SERVER_IP}:${REMOTE_UDP2RAW_PORT}" bold
+    colorize yellow "The UDP2RAW client is listening on port ${LOCAL_UDP2RAW_PORT} and connecting to the server TinyVPN port at ${SERVER_IP}:${REMOTE_TINYVPN_PORT}" bold
     echo
     press_key
 }
