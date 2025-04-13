@@ -301,13 +301,23 @@ configure_server(){
 [Unit]
 Description=UDP2RAW Service
 After=network.target
-Before=gamingtunnel.service
+Wants=network.target
 
 [Service]
 Type=simple
+WorkingDirectory=$CONFIG_DIR
 ExecStart=$CONFIG_DIR/udp2raw $UDP2RAW_COMMAND
 Restart=always
-RestartSec=3
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/udp2raw.log
+StandardError=append:/var/log/udp2raw.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target
@@ -325,12 +335,23 @@ EOF
 [Unit]
 Description=GamingVPN Server
 After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
+WorkingDirectory=$CONFIG_DIR
 ExecStart=$CONFIG_DIR/speederv2 $COMMAND
 Restart=always
-RestartSec=3
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/gamingtunnel.log
+StandardError=append:/var/log/gamingtunnel.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target
@@ -340,8 +361,18 @@ EOF
 	systemctl enable gamingtunnel &> /dev/null
 	systemctl start gamingtunnel &> /dev/null
 	
-	echo
-	colorize green "GamingVPN server started successfully." bold
+	# Check if service started successfully
+	if ! systemctl is-active --quiet gamingtunnel; then
+	    colorize red "GamingVPN server failed to start. Checking logs..." bold
+	    if [ -f "/var/log/gamingtunnel.error.log" ]; then
+	        echo "Last 10 lines of error log:"
+	        tail -n 10 /var/log/gamingtunnel.error.log
+	    fi
+	    colorize yellow "For more details, check: /var/log/gamingtunnel.log and /var/log/gamingtunnel.error.log" bold
+	else
+	    colorize green "GamingVPN server started successfully." bold
+	fi
+	
 	echo
 	press_key
 }
@@ -486,13 +517,23 @@ configure_client(){
 [Unit]
 Description=UDP2RAW Service
 After=network.target
-Before=gamingtunnel.service
+Wants=network.target
 
 [Service]
 Type=simple
+WorkingDirectory=$CONFIG_DIR
 ExecStart=$CONFIG_DIR/udp2raw $UDP2RAW_COMMAND
 Restart=always
-RestartSec=3
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/udp2raw.log
+StandardError=append:/var/log/udp2raw.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target
@@ -510,12 +551,23 @@ EOF
 [Unit]
 Description=GamingVPN Client
 After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
+WorkingDirectory=$CONFIG_DIR
 ExecStart=$CONFIG_DIR/speederv2 $COMMAND
 Restart=always
-RestartSec=3
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/gamingtunnel.log
+StandardError=append:/var/log/gamingtunnel.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target
@@ -525,8 +577,18 @@ EOF
 	systemctl enable gamingtunnel &> /dev/null
 	systemctl start gamingtunnel &> /dev/null
 	
-	echo
-	colorize green "GamingVPN client started successfully." bold
+	# Check if service started successfully
+	if ! systemctl is-active --quiet gamingtunnel; then
+	    colorize red "GamingVPN client failed to start. Checking logs..." bold
+	    if [ -f "/var/log/gamingtunnel.error.log" ]; then
+	        echo "Last 10 lines of error log:"
+	        tail -n 10 /var/log/gamingtunnel.error.log
+	    fi
+	    colorize yellow "For more details, check: /var/log/gamingtunnel.log and /var/log/gamingtunnel.error.log" bold
+	else
+	    colorize green "GamingVPN client started successfully." bold
+	fi
+	
 	echo
 	press_key
 }
