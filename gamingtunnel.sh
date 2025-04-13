@@ -74,12 +74,18 @@ install_gamingtunnel() {
       
     echo
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
-	    colorize green "GamingVPN core installed already." bold
-	    return 1
+        colorize green "GamingVPN core installed already." bold
+        return 1
     fi
     
+    # Make sure the destination directory exists
     if ! [ -d "$DEST_DIR" ]; then
-    	mkdir "$DEST_DIR" &> /dev/null
+        mkdir -p "$DEST_DIR" &> /dev/null
+        if ! [ -d "$DEST_DIR" ]; then
+            colorize red "Failed to create directory $DEST_DIR. Check permissions." bold
+            sleep 2
+            return 1
+        fi
     fi
     
     # Detect the system architecture
@@ -96,17 +102,49 @@ install_gamingtunnel() {
         return 1
     fi
 
-
+    # Download TinyVPN with better error handling
     colorize yellow "Installing GamingVPN Core..." bold
     echo
-    curl -L $URL -o $FILE &> /dev/null
-    chmod +x $FILE
+    curl -L $URL -o $FILE --fail
+    if [ $? -ne 0 ]; then
+        colorize red "Download failed for TinyVPN. URL: $URL" bold
+        sleep 2
+        # Try again with verbose output for debugging
+        colorize yellow "Retrying download with verbose output..." bold
+        curl -L $URL -o $FILE -v
+    fi
     
+    if [ -f "$FILE" ]; then
+        chmod +x $FILE
+        if [ $? -ne 0 ]; then
+            colorize red "Failed to set executable permission on $FILE" bold
+        fi
+    else
+        colorize red "TinyVPN file not found after download attempt. Check permissions or URL." bold
+    fi
+    
+    # Download UDP2RAW with better error handling
     colorize yellow "Installing UDP2RAW..." bold
     echo
-    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE &> /dev/null
-    chmod +x $UDP2RAW_FILE
+    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE --fail
+    if [ $? -ne 0 ]; then
+        colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL" bold
+        sleep 2
+        # Try again with verbose output for debugging
+        colorize yellow "Retrying download with verbose output..." bold
+        curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
+    fi
     
+    if [ -f "$UDP2RAW_FILE" ]; then
+        chmod +x $UDP2RAW_FILE
+        if [ $? -ne 0 ]; then
+            colorize red "Failed to set executable permission on $UDP2RAW_FILE" bold
+        fi
+    else
+        colorize red "UDP2RAW file not found after download attempt. Check permissions or URL." bold
+    fi
+    
+    # Check if files were installed successfully
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core and UDP2RAW installed successfully...\n" bold
         sleep 1
@@ -124,53 +162,52 @@ install_gamingtunnel() {
         return 1
     fi
 }
-install_gamingtunnel
 
-# Function to install jq if not already installed
-install_jq() {
-    if ! command -v jq &> /dev/null; then
-        # Check if the system is using apt package manager
-        if command -v apt-get &> /dev/null; then
-            echo -e "${RED}jq is not installed. Installing...${NC}"
-            sleep 1
-            sudo apt-get update
-            sudo apt-get install -y jq
-        else
-            echo -e "${RED}Error: Unsupported package manager. Please install jq manually.${NC}\n"
-            read -p "Press any key to continue..."
-            exit 1
-        fi
+# Function to get IPv4 and IPv6 addresses
+get_ip_addresses() {
+    # Get IPv4 address
+    IPV4_ADDRESS=$(curl -s -4 icanhazip.com 2>/dev/null)
+    if [ -z "$IPV4_ADDRESS" ]; then
+        IPV4_ADDRESS=$(curl -s -4 ifconfig.me 2>/dev/null)
     fi
+    if [ -z "$IPV4_ADDRESS" ]; then
+        IPV4_ADDRESS=$(curl -s -4 ipinfo.io/ip 2>/dev/null)
+    fi
+    
+    # Get IPv6 address if available
+    IPV6_ADDRESS=$(curl -s -6 icanhazip.com 2>/dev/null)
+    
+    # Export variables for use in other functions
+    export IPV4_ADDRESS
+    export IPV6_ADDRESS
 }
-
-# Install jq
-install_jq
-
-
-# Fetch server country
-SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.country')
-
-# Fetch server isp 
-SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.isp')
 
 # Function to display server location and IP
 display_server_info() {
     echo -e "\e[93m═════════════════════════════════════════════\e[0m"  
     
-    # Get the server's public IP address
-    if [ -z "$SERVER_IP" ]; then
-        SERVER_IP=$(curl -s icanhazip.com)
+    # Get the server's public IP addresses
+    if [ -z "$IPV4_ADDRESS" ] || [ -z "$IPV6_ADDRESS" ]; then
+        get_ip_addresses
     fi
     
-    # Show current IP address
-    echo -e "${CYAN}IP Address:${NC} $SERVER_IP"
+    # Set SERVER_IP to IPv4 for compatibility with existing code
+    if [ -z "$SERVER_IP" ] && [ -n "$IPV4_ADDRESS" ]; then
+        SERVER_IP=$IPV4_ADDRESS
+    fi
+    
+    # Show current IP addresses
+    echo -e "${CYAN}IPv4 Address:${NC} $IPV4_ADDRESS"
+    if [ -n "$IPV6_ADDRESS" ]; then
+        echo -e "${CYAN}IPv6 Address:${NC} $IPV6_ADDRESS"
+    fi
     
     # Try to get location info if jq is available
     if command -v jq &> /dev/null; then
         if [ -z "$SERVER_COUNTRY" ] || [ -z "$SERVER_ISP" ]; then
             # Fetch server country and ISP if not already set
-            SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.country')
-            SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$SERVER_IP" | jq -r '.isp')
+            SERVER_COUNTRY=$(curl -sS "http://ipwhois.app/json/$IPV4_ADDRESS" | jq -r '.country')
+            SERVER_ISP=$(curl -sS "http://ipwhois.app/json/$IPV4_ADDRESS" | jq -r '.isp')
         fi
         
         echo -e "${CYAN}Location:${NC} $SERVER_COUNTRY "
@@ -1523,22 +1560,22 @@ check_external_ip() {
     colorize cyan "External IP Address Check" bold
     echo
     
-    # Get the current IP address
-    colorize yellow "Checking your external IP address..." bold
-    CURRENT_IP=$(curl -s icanhazip.com)
+    # Get the current IP addresses
+    colorize yellow "Checking your external IP addresses..." bold
+    get_ip_addresses
     
-    if [ -z "$CURRENT_IP" ]; then
-        colorize red "Failed to retrieve external IP address. Please check your internet connection." bold
+    if [ -z "$IPV4_ADDRESS" ]; then
+        colorize red "Failed to retrieve external IPv4 address. Please check your internet connection." bold
     else
-        colorize green "Your current external IP address is:" bold
+        colorize green "Your current external IPv4 address is:" bold
         echo
-        colorize cyan "$CURRENT_IP" bold
+        colorize cyan "$IPV4_ADDRESS" bold
         echo
         
         # Try to get additional information
         if command -v jq &> /dev/null; then
-            colorize yellow "Retrieving IP details..." bold
-            IP_INFO=$(curl -sS "http://ipwhois.app/json/$CURRENT_IP")
+            colorize yellow "Retrieving IPv4 details..." bold
+            IP_INFO=$(curl -sS "http://ipwhois.app/json/$IPV4_ADDRESS")
             
             if [ -n "$IP_INFO" ]; then
                 COUNTRY=$(echo "$IP_INFO" | jq -r '.country')
@@ -1555,6 +1592,40 @@ check_external_ip() {
         fi
     fi
     
+    # Display IPv6 if available
+    if [ -n "$IPV6_ADDRESS" ]; then
+        echo
+        colorize green "Your current external IPv6 address is:" bold
+        echo
+        colorize cyan "$IPV6_ADDRESS" bold
+    else
+        echo
+        colorize yellow "No IPv6 address detected." bold
+    fi
+    
     echo
     press_key
 }
+
+# Install the Gaming Tunnel components
+install_gamingtunnel
+
+# Function to install jq if not already installed
+install_jq() {
+    if ! command -v jq &> /dev/null; then
+        # Check if the system is using apt package manager
+        if command -v apt-get &> /dev/null; then
+            echo -e "${RED}jq is not installed. Installing...${NC}"
+            sleep 1
+            sudo apt-get update
+            sudo apt-get install -y jq
+        else
+            echo -e "${RED}Error: Unsupported package manager. Please install jq manually.${NC}\n"
+            read -p "Press any key to continue..."
+            exit 1
+        fi
+    fi
+}
+
+# Install jq
+install_jq
