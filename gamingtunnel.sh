@@ -73,58 +73,47 @@ install_gamingtunnel() {
     URL_UDP2RAW_ARM="https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_arm"
       
     echo
-    echo "DEBUG: Current user is $(whoami)"
-    echo "DEBUG: Current directory is $(pwd)"
-    
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core installed already." bold
         return 1
     fi
     
-    # Make sure the destination directory exists - with verbose output
-    echo "DEBUG: Checking if directory $DEST_DIR exists"
-    if [ -d "$DEST_DIR" ]; then
-        echo "DEBUG: Directory $DEST_DIR exists"
-    else
-        echo "DEBUG: Creating directory $DEST_DIR"
-        mkdir -p "$DEST_DIR"
-        if [ $? -ne 0 ]; then
-            echo "DEBUG: Failed to create directory with exit code $?"
-            echo "DEBUG: Trying with sudo..."
-            sudo mkdir -p "$DEST_DIR"
-            if [ $? -ne 0 ]; then
-                colorize red "Failed to create directory $DEST_DIR even with sudo. Check permissions." bold
-                sleep 2
-                return 1
-            fi
-        fi
-        
-        echo "DEBUG: Checking if directory creation was successful"
-        if ! [ -d "$DEST_DIR" ]; then
-            colorize red "Failed to create directory $DEST_DIR. Directory does not exist after creation attempt." bold
-            sleep 2
-            return 1
-        else
-            echo "DEBUG: Directory $DEST_DIR created successfully"
-        fi
-    fi
-    
-    # Test directory writability
-    echo "DEBUG: Testing directory writability"
-    touch "$DEST_DIR/test_write"
-    if [ $? -ne 0 ]; then
-        echo "DEBUG: Directory is not writable"
-        colorize red "Directory $DEST_DIR is not writable. Check permissions." bold
-        sleep 2
+    # Check disk space before proceeding
+    FREE_SPACE=$(df -m /root | awk 'NR==2 {print $4}')
+    if [ -z "$FREE_SPACE" ]; then
+        colorize yellow "Warning: Could not determine free space. Continuing anyway..." bold
+    elif [ "$FREE_SPACE" -lt 10 ]; then
+        colorize red "Error: Not enough disk space available (${FREE_SPACE}MB free, need at least 10MB)." bold
+        colorize yellow "Please free up some disk space before installing." bold
+        sleep 3
         return 1
     else
-        echo "DEBUG: Directory is writable"
-        rm -f "$DEST_DIR/test_write"
+        colorize green "Disk space check: ${FREE_SPACE}MB available. Continuing installation..." bold
+    fi
+    
+    # Make sure the destination directory exists
+    if ! [ -d "$DEST_DIR" ]; then
+        colorize yellow "Creating directory $DEST_DIR..." bold
+        mkdir -p "$DEST_DIR" 2>/tmp/mkdir_error
+        
+        if ! [ -d "$DEST_DIR" ]; then
+            colorize red "Failed to create directory $DEST_DIR." bold
+            colorize yellow "Error details:" bold
+            if [ -f /tmp/mkdir_error ]; then
+                cat /tmp/mkdir_error
+                rm -f /tmp/mkdir_error
+            fi
+            colorize yellow "Possible causes:" bold
+            echo "- Insufficient permissions"
+            echo "- Disk space issues"
+            echo "- Filesystem mounted as read-only"
+            sleep 3
+            return 1
+        fi
     fi
     
     # Detect the system architecture
     ARCH=$(uname -m)
-    echo "DEBUG: System architecture is $ARCH"
     if [ "$ARCH" = "x86_64" ]; then
         URL=$URL_X86
         UDP2RAW_URL=$URL_UDP2RAW
@@ -137,70 +126,101 @@ install_gamingtunnel() {
         return 1
     fi
 
-    # Download TinyVPN with better error handling and verbose output
+    # Test internet connectivity
+    colorize yellow "Testing internet connectivity..." bold
+    if ! curl -s --head https://github.com >/dev/null; then
+        colorize red "Error: Cannot connect to the internet. Please check your connection." bold
+        sleep 3
+        return 1
+    fi
+
+    # Download TinyVPN with better error handling
     colorize yellow "Installing GamingVPN Core..." bold
-    echo "DEBUG: Downloading from $URL to $FILE"
-    curl -L $URL -o $FILE -v
-    CURL_EXIT_CODE=$?
+    echo
+    TMP_LOG=$(mktemp)
+    curl -L $URL -o $FILE --fail 2>$TMP_LOG
+    CURL_STATUS=$?
     
-    echo "DEBUG: curl exit code: $CURL_EXIT_CODE"
-    if [ $CURL_EXIT_CODE -ne 0 ]; then
-        colorize red "Download failed for TinyVPN. URL: $URL with exit code $CURL_EXIT_CODE" bold
-        echo "DEBUG: Trying with sudo..."
-        sudo curl -L $URL -o $FILE -v
-        CURL_EXIT_CODE=$?
-        echo "DEBUG: sudo curl exit code: $CURL_EXIT_CODE"
+    if [ $CURL_STATUS -ne 0 ]; then
+        colorize red "Download failed for TinyVPN. URL: $URL" bold
+        colorize yellow "Error details:" bold
+        cat $TMP_LOG
+        rm -f $TMP_LOG
+        
+        # Additional diagnostics
+        colorize yellow "Trying to diagnose the issue..." bold
+        echo "- Checking if destination directory is writable:"
+        touch "$DEST_DIR/test_write" 2>/dev/null && rm -f "$DEST_DIR/test_write" && echo "  ✓ Directory is writable" || echo "  ✗ Directory is not writable"
+        
+        echo "- Checking network connection:"
+        ping -c 1 github.com >/dev/null 2>&1 && echo "  ✓ Network connection is working" || echo "  ✗ Network connection issue"
+        
+        # Try again with verbose output for debugging
+        colorize yellow "Retrying download with verbose output..." bold
+        curl -L $URL -o $FILE -v
     fi
     
-    echo "DEBUG: Checking if file $FILE exists"
     if [ -f "$FILE" ]; then
-        echo "DEBUG: File $FILE exists, setting executable permissions"
+        # Check file size to ensure it's not a truncated download due to disk space
+        FILE_SIZE=$(stat -c%s "$FILE" 2>/dev/null || stat -f%z "$FILE" 2>/dev/null)
+        if [ -z "$FILE_SIZE" ] || [ "$FILE_SIZE" -lt 1000 ]; then
+            colorize red "Warning: TinyVPN file seems too small (${FILE_SIZE} bytes). Download may be incomplete." bold
+        fi
+        
         chmod +x $FILE
         if [ $? -ne 0 ]; then
-            echo "DEBUG: chmod failed, trying with sudo"
-            sudo chmod +x $FILE
-            if [ $? -ne 0 ]; then
-                colorize red "Failed to set executable permission on $FILE even with sudo" bold
-            fi
+            colorize red "Failed to set executable permission on $FILE" bold
+            echo "- Checking file permissions:"
+            ls -la $FILE
         fi
     else
-        echo "DEBUG: File $FILE does not exist after download"
-        colorize red "TinyVPN file not found after download attempt. Check permissions or URL." bold
+        colorize red "TinyVPN file not found after download attempt." bold
+        colorize yellow "Possible causes:" bold
+        echo "- Insufficient disk space"
+        echo "- Permission issues"
+        echo "- Temporary network failure"
     fi
     
-    # Download UDP2RAW with better error handling and verbose output
+    # Download UDP2RAW with better error handling
     colorize yellow "Installing UDP2RAW..." bold
-    echo "DEBUG: Downloading from $UDP2RAW_URL to $UDP2RAW_FILE"
-    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
-    CURL_EXIT_CODE=$?
+    echo
+    TMP_LOG=$(mktemp)
+    curl -L $UDP2RAW_URL -o $UDP2RAW_FILE --fail 2>$TMP_LOG
+    CURL_STATUS=$?
     
-    echo "DEBUG: curl exit code: $CURL_EXIT_CODE"
-    if [ $CURL_EXIT_CODE -ne 0 ]; then
-        colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL with exit code $CURL_EXIT_CODE" bold
-        echo "DEBUG: Trying with sudo..."
-        sudo curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
-        CURL_EXIT_CODE=$?
-        echo "DEBUG: sudo curl exit code: $CURL_EXIT_CODE"
+    if [ $CURL_STATUS -ne 0 ]; then
+        colorize red "Download failed for UDP2RAW. URL: $UDP2RAW_URL" bold
+        colorize yellow "Error details:" bold
+        cat $TMP_LOG
+        rm -f $TMP_LOG
+        
+        # Try again with verbose output for debugging
+        colorize yellow "Retrying download with verbose output..." bold
+        curl -L $UDP2RAW_URL -o $UDP2RAW_FILE -v
     fi
     
-    echo "DEBUG: Checking if file $UDP2RAW_FILE exists"
     if [ -f "$UDP2RAW_FILE" ]; then
-        echo "DEBUG: File $UDP2RAW_FILE exists, setting executable permissions"
+        # Check file size to ensure it's not a truncated download due to disk space
+        FILE_SIZE=$(stat -c%s "$UDP2RAW_FILE" 2>/dev/null || stat -f%z "$UDP2RAW_FILE" 2>/dev/null)
+        if [ -z "$FILE_SIZE" ] || [ "$FILE_SIZE" -lt 1000 ]; then
+            colorize red "Warning: UDP2RAW file seems too small (${FILE_SIZE} bytes). Download may be incomplete." bold
+        fi
+        
         chmod +x $UDP2RAW_FILE
         if [ $? -ne 0 ]; then
-            echo "DEBUG: chmod failed, trying with sudo"
-            sudo chmod +x $UDP2RAW_FILE
-            if [ $? -ne 0 ]; then
-                colorize red "Failed to set executable permission on $UDP2RAW_FILE even with sudo" bold
-            fi
+            colorize red "Failed to set executable permission on $UDP2RAW_FILE" bold
+            echo "- Checking file permissions:"
+            ls -la $UDP2RAW_FILE
         fi
     else
-        echo "DEBUG: File $UDP2RAW_FILE does not exist after download"
-        colorize red "UDP2RAW file not found after download attempt. Check permissions or URL." bold
+        colorize red "UDP2RAW file not found after download attempt." bold
+        colorize yellow "Possible causes:" bold
+        echo "- Insufficient disk space"
+        echo "- Permission issues"
+        echo "- Temporary network failure"
     fi
     
     # Check if files were installed successfully
-    echo "DEBUG: Final check for installed files"
     if [ -f "$FILE" ] && [ -f "$UDP2RAW_FILE" ]; then
         colorize green "GamingVPN core and UDP2RAW installed successfully...\n" bold
         sleep 1
@@ -215,6 +235,17 @@ install_gamingtunnel() {
         return 1
     else
         colorize red "Failed to install GamingVPN components...\n" bold
+        colorize yellow "Try running the script with these alternative methods:" bold
+        echo "1. Download the script first, then run:"
+        echo "   curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/gamingtunnel.sh -o gamingtunnel.sh"
+        echo "   chmod +x gamingtunnel.sh"
+        echo "   sudo ./gamingtunnel.sh"
+        echo
+        echo "2. Or use wget instead of curl:"
+        echo "   wget -q https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/gamingtunnel.sh -O gamingtunnel.sh"
+        echo "   chmod +x gamingtunnel.sh"
+        echo "   sudo ./gamingtunnel.sh"
+        sleep 3
         return 1
     fi
 }
