@@ -505,9 +505,6 @@ configure_client(){
             UDP2RAW_MODE="faketcp"
         fi
         
-        # Update the main command to use local UDP2RAW port
-        COMMAND="-c -r${IP}:${PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev gaming --keep-reconnect --disable-obscure"
-        
         # UDP2RAW command
         UDP2RAW_COMMAND="-s -l0.0.0.0:${UDP2RAW_LOCAL_PORT} -r${IP}:${PORT} -a -k \"${UDP2RAW_PASS}\" --cipher-mode xor --auth-mode simple --raw-mode ${UDP2RAW_MODE}"
         
