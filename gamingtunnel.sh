@@ -459,7 +459,7 @@ configure_tinyvpn_client(){
     echo -ne "[-] MTU value (default 1250): "
     read -r MTU
     if [ -z "$MTU" ]; then
-        colorize yellow "MTU set to default value (1250)."
+        colorize yellow "MTU set to default value (1250)." 
         MTU="--mtu 1250"
     else
         colorize yellow "MTU set to $MTU."
@@ -1281,38 +1281,28 @@ display_menu() {
     display_server_info
     display_gamingtunnel_status
     echo
-    colorize cyan "═══ CONFIGURATION ═══" bold
-    colorize green " 1. TinyVPN Server Configuration" bold
-    colorize green " 2. TinyVPN Client Configuration" bold
-    colorize green " 3. UDP2RAW Server Configuration" bold
-    colorize green " 4. UDP2RAW Client Configuration" bold
+    colorize cyan "═══ MAIN MENU ═══" bold
+    colorize green " 1. TinyVPN Management" bold
+    colorize green " 2. UDP2RAW Server Configuration" bold
+    colorize green " 3. UDP2RAW Client Configuration" bold
     echo
     colorize cyan "═══ MULTI-CONFIGURATION ═══" bold
-    colorize green " 5. TinyVPN Client Multi-Config" bold
-    colorize green " 6. UDP2RAW Client Multi-Config" bold
-    colorize green " 7. List All Multi-Configurations" bold
-    colorize green " 8. Check Status of Multi-Config" bold
-    colorize green " 9. View Logs of Multi-Config" bold
-    colorize green "10. Restart Multi-Config" bold
-    colorize green "11. Remove Multi-Config" bold
+    colorize green " 4. UDP2RAW Client Multi-Config" bold
+    colorize green " 5. List UDP2RAW Configurations" bold
     echo
     colorize cyan "═══ SERVICE MANAGEMENT ═══" bold
-    colorize magenta "12. Check TinyVPN service status" 
-    colorize magenta "13. Check UDP2RAW service status" 
-    colorize yellow "14. View TinyVPN logs"
-    colorize yellow "15. View UDP2RAW logs"
-    colorize yellow "16. Restart TinyVPN service" 
-    colorize yellow "17. Restart UDP2RAW service" 
+    colorize magenta " 6. Check UDP2RAW service status" 
+    colorize yellow " 7. View UDP2RAW logs"
+    colorize yellow " 8. Restart UDP2RAW service" 
     echo
     colorize cyan "═══ REMOVAL ═══" bold
-    colorize red "18. Remove TinyVPN service" 
-    colorize red "19. Remove UDP2RAW service"
-    colorize red "20. Remove all services"
-    colorize red "21. Remove core files"
+    colorize red " 9. Remove UDP2RAW service"
+    colorize red "10. Remove all services"
+    colorize red "11. Remove core files"
     echo
     colorize cyan "═══ UTILITIES ═══" bold
-    colorize magenta "22. Create symlink to script" bold
-    colorize magenta "23. Check External IP Address" bold
+    colorize magenta "12. Create symlink to script" bold
+    colorize magenta "13. Check External IP Address" bold
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -1320,31 +1310,21 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-23]: " choice
+    read -p "Enter your choice [0-13]: " choice
     case $choice in
-        1) configure_tinyvpn_server ;;
-        2) configure_tinyvpn_client ;;
-        3) configure_udp2raw_server ;;
-        4) configure_udp2raw_client ;;
-        5) configure_tinyvpn_client_multi ;;
-        6) configure_udp2raw_client_multi ;;
-        7) list_multi_configs ;;
-        8) check_status_multi_config ;;
-        9) view_logs_multi_config ;;
-        10) restart_multi_config ;;
-        11) remove_multi_config ;;
-        12) check_service_status_tinyvpn ;;
-        13) check_service_status_udp2raw ;;
-        14) view_logs_tinyvpn ;;
-        15) view_logs_udp2raw ;;
-        16) restart_service_tinyvpn ;;
-        17) restart_service_udp2raw ;;
-        18) remove_tinyvpn_service ;;
-        19) remove_udp2raw_service ;;
-        20) remove_all_services ;;
-        21) remove_core ;;
-        22) create_symlink ;;
-        23) check_external_ip ;;
+        1) tinyvpn_menu ;;
+        2) configure_udp2raw_server ;;
+        3) configure_udp2raw_client ;;
+        4) configure_udp2raw_client_multi ;;
+        5) list_multi_configs ;;
+        6) check_service_status_udp2raw ;;
+        7) view_logs_udp2raw ;;
+        8) restart_service_udp2raw ;;
+        9) remove_udp2raw_service ;;
+        10) remove_all_services ;;
+        11) remove_core ;;
+        12) create_symlink ;;
+        13) check_external_ip ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
@@ -1651,3 +1631,919 @@ install_jq() {
 
 # Install jq
 install_jq
+
+# TinyVPN Config Database
+TINYVPN_CONFIG_DIR="/root/gamingtunnel/configs"
+TINYVPN_CONFIG_DB="$TINYVPN_CONFIG_DIR/tinyvpn_configs.json"
+
+# Initialize TinyVPN config database if it doesn't exist
+initialize_tinyvpn_config_db() {
+    # Create config directory if it doesn't exist
+    if [ ! -d "$TINYVPN_CONFIG_DIR" ]; then
+        mkdir -p "$TINYVPN_CONFIG_DIR"
+    fi
+    
+    # Create config database if it doesn't exist
+    if [ ! -f "$TINYVPN_CONFIG_DB" ]; then
+        echo '{
+            "server_configs": [],
+            "client_configs": []
+        }' > "$TINYVPN_CONFIG_DB"
+    fi
+}
+
+configure_tinyvpn_server_multi() {
+    initialize_tinyvpn_config_db
+    
+    clear
+    colorize cyan "Configure TinyVPN Server" bold
+    echo
+    
+    # Get a unique name for this server configuration
+    echo -ne "[*] Enter a name for this server configuration: "
+    read -r CONFIG_NAME
+    if [ -z "$CONFIG_NAME" ]; then
+        colorize red "Configuration name is required." bold
+        sleep 2
+        return 1
+    fi
+    
+    # Sanitize the name to be safe for a filename
+    CONFIG_NAME=$(echo "$CONFIG_NAME" | tr -cd '[:alnum:]-_')
+    
+    # Create unique service file path
+    SERVICE_FILE_MULTI="/etc/systemd/system/tinyvpn-server-${CONFIG_NAME}.service"
+    
+    # Check if service already exists
+    if [ -f "$SERVICE_FILE_MULTI" ]; then
+        colorize red "A TinyVPN server with name '${CONFIG_NAME}' already exists." bold
+        sleep 2
+        return 1
+    fi
+    
+    echo
+    
+    # Tunnel Port - check for existing ports in the database
+    echo -ne "[-] Tunnel Port (default 4096): "
+    read -r PORT
+    if [ -z "$PORT" ]; then
+        colorize yellow "Tunnel port 4096 selected by default."
+        PORT=4096
+    fi
+    
+    # Check if port is already in use by the system
+    if command -v ss &> /dev/null; then
+        # Using ss command (newer systems)
+        PORT_CHECK=$(ss -tuln | grep ":$PORT ")
+    elif command -v netstat &> /dev/null; then
+        # Using netstat command (older systems)
+        PORT_CHECK=$(netstat -tuln | grep ":$PORT ")
+    else
+        # If neither command is available, use a less reliable method
+        PORT_CHECK=$(lsof -i:$PORT 2>/dev/null)
+    fi
+    
+    if [ -n "$PORT_CHECK" ]; then
+        colorize red "ERROR: Port $PORT is already in use!" bold
+        colorize yellow "Please choose a different port number." bold
+        echo
+        echo "$PORT_CHECK"
+        echo
+        sleep 2
+        return 1
+    fi
+    
+    # Check if port is already used by another TinyVPN config
+    if [ -f "$TINYVPN_CONFIG_DB" ]; then
+        local EXISTING_PORTS=$(jq -r '.server_configs[].port' "$TINYVPN_CONFIG_DB" 2>/dev/null)
+        if echo "$EXISTING_PORTS" | grep -q "^$PORT$"; then
+            colorize red "ERROR: Port $PORT is already used by another TinyVPN configuration!" bold
+            colorize yellow "Please choose a different port number." bold
+            echo
+            sleep 2
+            return 1
+        fi
+    fi
+    
+    echo
+    
+    # FEC Value
+    echo -ne "[-] FEC value (with x:y format, default 2:1, enter 0 to disable): "
+    read -r FEC
+    if [ -z "$FEC" ]; then
+    	colorize yellow "FEC set to 2:1"
+        FEC="-f2:1"
+    elif [[ "$FEC" == "0" ]]; then
+   	    colorize yellow "FEC is disabled"
+    	FEC="--disable-fec"
+	else
+		FEC="-f${FEC}"
+    fi
+  
+    echo
+    
+    # Subnet address - generate a unique one if not specified
+    echo -ne "[-] Subnet Address (leave empty for automatic unique subnet): "
+    read -r SUBNET
+    if [ -z "$SUBNET" ]; then
+        # Get existing subnets
+        local EXISTING_SUBNETS=""
+        if [ -f "$TINYVPN_CONFIG_DB" ]; then
+            EXISTING_SUBNETS=$(jq -r '.server_configs[].subnet' "$TINYVPN_CONFIG_DB" 2>/dev/null)
+        fi
+        
+        # Generate a random subnet that doesn't conflict
+        local SUBNET_BASE="10.22"
+        local RANDOM_OCTET=0
+        local MAX_ATTEMPTS=50
+        local ATTEMPT=0
+        
+        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            RANDOM_OCTET=$((1 + RANDOM % 254))
+            SUBNET="${SUBNET_BASE}.${RANDOM_OCTET}.0"
+            
+            if ! echo "$EXISTING_SUBNETS" | grep -q "^$SUBNET$"; then
+                break
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+        done
+        
+        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            colorize red "Failed to generate a unique subnet after $MAX_ATTEMPTS attempts." bold
+            sleep 2
+            return 1
+        fi
+        
+        colorize yellow "Generated unique subnet: $SUBNET"
+    else
+        # Check if subnet is already used
+        if [ -f "$TINYVPN_CONFIG_DB" ]; then
+            local EXISTING_SUBNETS=$(jq -r '.server_configs[].subnet' "$TINYVPN_CONFIG_DB" 2>/dev/null)
+            if echo "$EXISTING_SUBNETS" | grep -q "^$SUBNET$"; then
+                colorize red "ERROR: Subnet $SUBNET is already used by another TinyVPN configuration!" bold
+                colorize yellow "Please choose a different subnet." bold
+                echo
+                sleep 2
+                return 1
+            fi
+        fi
+    fi
+    
+    echo
+    
+    # Mode
+    echo -ne "[-] Mode (0 for non-game usage, 1 for game usage): "
+    read -r MODE
+    if [ -z "$MODE" ]; then
+    	colorize yellow "Optimized for gaming usage by default."
+        MODE="--mode 1 --timeout 1"
+    elif [[ "$MODE" = "0" ]]; then
+    	colorize yellow "Optimized for non-gaming usage."
+    	MODE="--mode 0 --timeout 4"
+    else
+       	colorize yellow "Optimized for gaming usage."
+        MODE="--mode 1 --timeout 1"   	
+    fi
+    
+    echo
+    
+    # MTU Value
+    echo -ne "[-] MTU value (default 1250, enter 0 to skip): "
+    read -r MTU_VALUE
+    if [ -z "$MTU_VALUE" ] || [ "$MTU_VALUE" = "0" ]; then
+        colorize yellow "MTU parameter will be skipped."
+        MTU=""
+    else
+        colorize yellow "MTU set to $MTU_VALUE."
+        MTU="--mtu $MTU_VALUE"
+    fi
+    
+    # TUN device name
+    TUN_DEV="gaming-${CONFIG_NAME}"
+    colorize yellow "Using TUN device name: ${TUN_DEV}"
+    
+    # Final command
+    COMMAND="-s -l[::]:$PORT $FEC --sub-net $SUBNET $MTU $MODE --tun-dev $TUN_DEV --disable-obscure"
+    
+    # Save this configuration to the database
+    if [ -f "$TINYVPN_CONFIG_DB" ]; then
+        # Create a temporary file for the new config
+        local TEMP_CONFIG=$(mktemp)
+        jq --arg name "$CONFIG_NAME" \
+           --arg port "$PORT" \
+           --arg subnet "$SUBNET" \
+           --arg tun_dev "$TUN_DEV" \
+           --arg command "$COMMAND" \
+           --arg service "$SERVICE_FILE_MULTI" \
+           '.server_configs += [{"name": $name, "port": $port, "subnet": $subnet, "tun_dev": $tun_dev, "command": $command, "service": $service}]' \
+           "$TINYVPN_CONFIG_DB" > "$TEMP_CONFIG"
+        
+        # Replace the original file with the updated one
+        mv "$TEMP_CONFIG" "$TINYVPN_CONFIG_DB"
+    fi
+    
+    # Create the systemd service unit file
+    cat << EOF > "$SERVICE_FILE_MULTI"
+[Unit]
+Description=TinyVPN Server (${CONFIG_NAME})
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$CONFIG_DIR
+ExecStart=$CONFIG_DIR/tinyvpn $COMMAND
+Restart=always
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/tinyvpn-server-${CONFIG_NAME}.log
+StandardError=append:/var/log/tinyvpn-server-${CONFIG_NAME}.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload &> /dev/null
+    systemctl enable "tinyvpn-server-${CONFIG_NAME}" &> /dev/null
+    systemctl start "tinyvpn-server-${CONFIG_NAME}" &> /dev/null
+    
+    # Check if service started successfully
+    if ! systemctl is-active --quiet "tinyvpn-server-${CONFIG_NAME}"; then
+        colorize red "TinyVPN server for '${CONFIG_NAME}' failed to start. Checking logs..." bold
+        if [ -f "/var/log/tinyvpn-server-${CONFIG_NAME}.error.log" ]; then
+            echo "Last 10 lines of error log:"
+            tail -n 10 "/var/log/tinyvpn-server-${CONFIG_NAME}.error.log"
+        fi
+        colorize yellow "For more details, check: /var/log/tinyvpn-server-${CONFIG_NAME}.log and /var/log/tinyvpn-server-${CONFIG_NAME}.error.log" bold
+    else
+        colorize green "TinyVPN server for '${CONFIG_NAME}' started successfully." bold
+        echo
+        colorize yellow "Server Configuration Summary:" bold
+        echo "Configuration Name: $CONFIG_NAME"
+        echo "Listening Port: $PORT"
+        echo "Subnet: $SUBNET"
+        echo "TUN Device: $TUN_DEV"
+    fi
+    
+    echo
+    press_key
+}
+
+configure_tinyvpn_client_multi_v2() {
+    initialize_tinyvpn_config_db
+    
+    clear
+    colorize cyan "Configure TinyVPN Client" bold
+    echo
+    
+    # Get a unique name for this client configuration
+    echo -ne "[*] Enter a name for this client configuration: "
+    read -r CONFIG_NAME
+    if [ -z "$CONFIG_NAME" ]; then
+        colorize red "Configuration name is required." bold
+        sleep 2
+        return 1
+    fi
+    
+    # Sanitize the name to be safe for a filename
+    CONFIG_NAME=$(echo "$CONFIG_NAME" | tr -cd '[:alnum:]-_')
+    
+    # Create unique service file path
+    SERVICE_FILE_MULTI="/etc/systemd/system/tinyvpn-client-${CONFIG_NAME}.service"
+    
+    # Check if service already exists
+    if [ -f "$SERVICE_FILE_MULTI" ]; then
+        colorize red "A TinyVPN client with name '${CONFIG_NAME}' already exists." bold
+        sleep 2
+        return 1
+    fi
+    
+    echo
+    
+    # Remote Server Address
+    echo -ne "[*] Remote server address (in IPv4 or [IPv6] format): "
+    read -r SERVER_IP
+    if [ -z "$SERVER_IP" ]; then
+        colorize red "Enter a valid IP address..." bold
+        sleep 2
+        return 1
+    fi
+    
+    echo
+    
+    # Tunnel Port
+    echo -ne "[-] Remote Server Port (default 4096): "
+    read -r PORT
+    if [ -z "$PORT" ]; then
+        colorize yellow "Remote server port 4096 selected by default."
+        PORT=4096
+    fi
+    
+    echo
+    
+    # FEC Value
+    echo -ne "[-] FEC value (with x:y format, default 2:1, enter 0 to disable): "
+    read -r FEC
+    if [ -z "$FEC" ]; then
+        colorize yellow "FEC set to 2:1"
+        FEC="-f2:1"
+    elif [[ "$FEC" == "0" ]]; then
+        colorize yellow "FEC is disabled"
+        FEC="--disable-fec"
+    else
+        FEC="-f${FEC}"
+    fi
+
+    echo
+    
+    # Subnet address - try to match server subnet if known
+    local SUGGESTED_SUBNET=""
+    local SERVER_CONFIGS=()
+    
+    if [ -f "$TINYVPN_CONFIG_DB" ]; then
+        # Get a list of server configurations to suggest matching subnet
+        SERVER_CONFIGS=($(jq -r '.server_configs[] | "\(.name):\(.subnet)"' "$TINYVPN_CONFIG_DB" 2>/dev/null))
+        
+        if [ ${#SERVER_CONFIGS[@]} -gt 0 ]; then
+            echo "Available server configurations:"
+            for i in "${!SERVER_CONFIGS[@]}"; do
+                echo "  $((i+1)). ${SERVER_CONFIGS[$i]}"
+            done
+            
+            echo -ne "[*] Enter server number to match configuration (or press enter to skip): "
+            read -r SERVER_NUM
+            
+            if [ -n "$SERVER_NUM" ] && [ "$SERVER_NUM" -ge 1 ] && [ "$SERVER_NUM" -le ${#SERVER_CONFIGS[@]} ]; then
+                SELECTED_SERVER="${SERVER_CONFIGS[$((SERVER_NUM-1))]}"
+                SUGGESTED_SUBNET=$(echo "$SELECTED_SERVER" | cut -d':' -f2)
+                colorize yellow "Using subnet from selected server: $SUGGESTED_SUBNET"
+            fi
+        fi
+    fi
+    
+    if [ -z "$SUGGESTED_SUBNET" ]; then
+        echo -ne "[-] Subnet Address (leave empty for automatic unique subnet): "
+        read -r SUBNET
+        
+        if [ -z "$SUBNET" ]; then
+            # Generate a random subnet that doesn't conflict
+            local EXISTING_SUBNETS=""
+            if [ -f "$TINYVPN_CONFIG_DB" ]; then
+                EXISTING_SUBNETS=$(jq -r '.client_configs[].subnet' "$TINYVPN_CONFIG_DB" 2>/dev/null)
+            fi
+            
+            local SUBNET_BASE="10.22"
+            local RANDOM_OCTET=0
+            local MAX_ATTEMPTS=50
+            local ATTEMPT=0
+            
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                RANDOM_OCTET=$((1 + RANDOM % 254))
+                SUBNET="${SUBNET_BASE}.${RANDOM_OCTET}.0"
+                
+                if ! echo "$EXISTING_SUBNETS" | grep -q "^$SUBNET$"; then
+                    break
+                fi
+                
+                ATTEMPT=$((ATTEMPT + 1))
+            done
+            
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                colorize red "Failed to generate a unique subnet after $MAX_ATTEMPTS attempts." bold
+                sleep 2
+                return 1
+            fi
+            
+            colorize yellow "Generated unique subnet: $SUBNET"
+        fi
+    else
+        SUBNET=$SUGGESTED_SUBNET
+    fi
+    
+    echo
+    
+    # Mode
+    echo -ne "[-] Mode (0 for non-game usage, 1 for game usage): "
+    read -r MODE
+    if [ -z "$MODE" ]; then
+        colorize yellow "Optimized for gaming usage by default."
+        MODE="--mode 1 --timeout 1"
+    elif [[ "$MODE" = "0" ]]; then
+        colorize yellow "Optimized for non-gaming usage."
+        MODE="--mode 0 --timeout 4"
+    else
+        colorize yellow "Optimized for gaming usage."
+        MODE="--mode 1 --timeout 1"    
+    fi
+    
+    echo
+    
+    # MTU Value
+    echo -ne "[-] MTU value (default 1250, enter 0 to skip): "
+    read -r MTU_VALUE
+    if [ -z "$MTU_VALUE" ] || [ "$MTU_VALUE" = "0" ]; then
+        colorize yellow "MTU parameter will be skipped."
+        MTU=""
+    else
+        colorize yellow "MTU set to $MTU_VALUE."
+        MTU="--mtu $MTU_VALUE"
+    fi
+    
+    # TUN device name
+    TUN_DEV="gaming-${CONFIG_NAME}"
+    colorize yellow "Using TUN device name: ${TUN_DEV}"
+    
+    # Final command
+    COMMAND="-c -r${SERVER_IP}:${PORT} $FEC --sub-net $SUBNET $MTU $MODE --tun-dev $TUN_DEV --keep-reconnect --disable-obscure"
+    
+    # Save this configuration to the database
+    if [ -f "$TINYVPN_CONFIG_DB" ]; then
+        # Create a temporary file for the new config
+        local TEMP_CONFIG=$(mktemp)
+        jq --arg name "$CONFIG_NAME" \
+           --arg server_ip "$SERVER_IP" \
+           --arg port "$PORT" \
+           --arg subnet "$SUBNET" \
+           --arg tun_dev "$TUN_DEV" \
+           --arg command "$COMMAND" \
+           --arg service "$SERVICE_FILE_MULTI" \
+           '.client_configs += [{"name": $name, "server_ip": $server_ip, "port": $port, "subnet": $subnet, "tun_dev": $tun_dev, "command": $command, "service": $service}]' \
+           "$TINYVPN_CONFIG_DB" > "$TEMP_CONFIG"
+        
+        # Replace the original file with the updated one
+        mv "$TEMP_CONFIG" "$TINYVPN_CONFIG_DB"
+    fi
+    
+    # Create the systemd service unit file
+    cat << EOF > "$SERVICE_FILE_MULTI"
+[Unit]
+Description=TinyVPN Client (${CONFIG_NAME})
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$CONFIG_DIR
+ExecStart=$CONFIG_DIR/tinyvpn $COMMAND
+Restart=always
+RestartSec=1
+LimitNOFILE=infinity
+
+# Logging configuration
+StandardOutput=append:/var/log/tinyvpn-client-${CONFIG_NAME}.log
+StandardError=append:/var/log/tinyvpn-client-${CONFIG_NAME}.error.log
+
+# Optional: log rotation to prevent huge log files
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload &> /dev/null
+    systemctl enable "tinyvpn-client-${CONFIG_NAME}" &> /dev/null
+    systemctl start "tinyvpn-client-${CONFIG_NAME}" &> /dev/null
+    
+    # Check if service started successfully
+    if ! systemctl is-active --quiet "tinyvpn-client-${CONFIG_NAME}"; then
+        colorize red "TinyVPN client for '${CONFIG_NAME}' failed to start. Checking logs..." bold
+        if [ -f "/var/log/tinyvpn-client-${CONFIG_NAME}.error.log" ]; then
+            echo "Last 10 lines of error log:"
+            tail -n 10 "/var/log/tinyvpn-client-${CONFIG_NAME}.error.log"
+        fi
+        colorize yellow "For more details, check: /var/log/tinyvpn-client-${CONFIG_NAME}.log and /var/log/tinyvpn-client-${CONFIG_NAME}.error.log" bold
+    else
+        colorize green "TinyVPN client for '${CONFIG_NAME}' started successfully." bold
+        echo
+        colorize yellow "Client Configuration Summary:" bold
+        echo "Configuration Name: $CONFIG_NAME"
+        echo "Remote Server: $SERVER_IP:$PORT"
+        echo "Subnet: $SUBNET"
+        echo "TUN Device: $TUN_DEV"
+    fi
+    
+    echo
+    press_key
+}
+
+list_tinyvpn_configs() {
+    initialize_tinyvpn_config_db
+    
+    clear
+    colorize cyan "TinyVPN Configurations" bold
+    echo
+    
+    if [ ! -f "$TINYVPN_CONFIG_DB" ]; then
+        colorize yellow "No TinyVPN configurations found." bold
+        echo
+        press_key
+        return 0
+    fi
+    
+    # Extract server configurations
+    local SERVER_CONFIGS=($(jq -r '.server_configs[].name' "$TINYVPN_CONFIG_DB" 2>/dev/null))
+    
+    if [ ${#SERVER_CONFIGS[@]} -gt 0 ]; then
+        colorize green "Server Configurations:" bold
+        echo
+        
+        for i in "${!SERVER_CONFIGS[@]}"; do
+            local server_name="${SERVER_CONFIGS[$i]}"
+            local server_port=$(jq -r ".server_configs[] | select(.name == \"$server_name\") | .port" "$TINYVPN_CONFIG_DB")
+            local server_subnet=$(jq -r ".server_configs[] | select(.name == \"$server_name\") | .subnet" "$TINYVPN_CONFIG_DB")
+            local server_service=$(jq -r ".server_configs[] | select(.name == \"$server_name\") | .service" "$TINYVPN_CONFIG_DB")
+            
+            # Check service status
+            local status="inactive"
+            if systemctl is-active --quiet "tinyvpn-server-${server_name}"; then
+                status="active"
+            fi
+            
+            if [ "$status" = "active" ]; then
+                colorize cyan " $((i+1)). $server_name" bold
+                colorize green "    Status: $status" bold
+            else
+                colorize cyan " $((i+1)). $server_name" bold
+                colorize red "    Status: $status" bold
+            fi
+            
+            echo "    Port: $server_port"
+            echo "    Subnet: $server_subnet"
+            echo
+        done
+    else
+        colorize yellow "No server configurations found." bold
+        echo
+    fi
+    
+    # Extract client configurations
+    local CLIENT_CONFIGS=($(jq -r '.client_configs[].name' "$TINYVPN_CONFIG_DB" 2>/dev/null))
+    
+    if [ ${#CLIENT_CONFIGS[@]} -gt 0 ]; then
+        colorize green "Client Configurations:" bold
+        echo
+        
+        for i in "${!CLIENT_CONFIGS[@]}"; do
+            local client_name="${CLIENT_CONFIGS[$i]}"
+            local client_server=$(jq -r ".client_configs[] | select(.name == \"$client_name\") | .server_ip" "$TINYVPN_CONFIG_DB")
+            local client_port=$(jq -r ".client_configs[] | select(.name == \"$client_name\") | .port" "$TINYVPN_CONFIG_DB")
+            local client_subnet=$(jq -r ".client_configs[] | select(.name == \"$client_name\") | .subnet" "$TINYVPN_CONFIG_DB")
+            
+            # Check service status
+            local status="inactive"
+            if systemctl is-active --quiet "tinyvpn-client-${client_name}"; then
+                status="active"
+            fi
+            
+            if [ "$status" = "active" ]; then
+                colorize cyan " $((i+1)). $client_name" bold
+                colorize green "    Status: $status" bold
+            else
+                colorize cyan " $((i+1)). $client_name" bold
+                colorize red "    Status: $status" bold
+            fi
+            
+            echo "    Server: $client_server:$client_port"
+            echo "    Subnet: $client_subnet"
+            echo
+        done
+    else
+        colorize yellow "No client configurations found." bold
+        echo
+    fi
+    
+    press_key
+}
+
+manage_tinyvpn_config() {
+    initialize_tinyvpn_config_db
+    
+    clear
+    colorize cyan "Manage TinyVPN Configuration" bold
+    echo
+    
+    if [ ! -f "$TINYVPN_CONFIG_DB" ]; then
+        colorize yellow "No TinyVPN configurations found." bold
+        echo
+        press_key
+        return 0
+    fi
+    
+    # Combined list of configs
+    local ALL_CONFIGS=()
+    local CONFIG_TYPES=()
+    
+    # First get server configs
+    local SERVER_CONFIGS=($(jq -r '.server_configs[].name' "$TINYVPN_CONFIG_DB" 2>/dev/null))
+    for server in "${SERVER_CONFIGS[@]}"; do
+        ALL_CONFIGS+=("$server")
+        CONFIG_TYPES+=("server")
+    done
+    
+    # Then client configs
+    local CLIENT_CONFIGS=($(jq -r '.client_configs[].name' "$TINYVPN_CONFIG_DB" 2>/dev/null))
+    for client in "${CLIENT_CONFIGS[@]}"; do
+        ALL_CONFIGS+=("$client")
+        CONFIG_TYPES+=("client")
+    done
+    
+    if [ ${#ALL_CONFIGS[@]} -eq 0 ]; then
+        colorize yellow "No configurations found." bold
+        echo
+        press_key
+        return 0
+    fi
+    
+    echo "Available configurations:"
+    for i in "${!ALL_CONFIGS[@]}"; do
+        local name="${ALL_CONFIGS[$i]}"
+        local type="${CONFIG_TYPES[$i]}"
+        local status="inactive"
+        
+        if [ "$type" = "server" ]; then
+            if systemctl is-active --quiet "tinyvpn-server-${name}"; then
+                status="active"
+            fi
+            
+            if [ "$status" = "active" ]; then
+                colorize green " $((i+1)). [Server] $name ($status)" bold
+            else
+                colorize red " $((i+1)). [Server] $name ($status)" bold
+            fi
+        else
+            if systemctl is-active --quiet "tinyvpn-client-${name}"; then
+                status="active"
+            fi
+            
+            if [ "$status" = "active" ]; then
+                colorize green " $((i+1)). [Client] $name ($status)" bold
+            else
+                colorize red " $((i+1)). [Client] $name ($status)" bold
+            fi
+        fi
+    done
+    
+    echo
+    echo -ne "[*] Enter configuration number to manage (0 to go back): "
+    read -r CONFIG_NUM
+    
+    if [ -z "$CONFIG_NUM" ] || [ "$CONFIG_NUM" -eq 0 ]; then
+        return 0
+    fi
+    
+    if [ "$CONFIG_NUM" -ge 1 ] && [ "$CONFIG_NUM" -le ${#ALL_CONFIGS[@]} ]; then
+        local selected_name="${ALL_CONFIGS[$((CONFIG_NUM-1))]}"
+        local selected_type="${CONFIG_TYPES[$((CONFIG_NUM-1))]}"
+        
+        manage_tinyvpn_config_actions "$selected_name" "$selected_type"
+    else
+        colorize red "Invalid selection." bold
+        sleep 2
+    fi
+}
+
+manage_tinyvpn_config_actions() {
+    local config_name="$1"
+    local config_type="$2"
+    local service_prefix="tinyvpn-${config_type}"
+    
+    while true; do
+        clear
+        if [ "$config_type" = "server" ]; then
+            colorize cyan "Managing TinyVPN Server: $config_name" bold
+        else
+            colorize cyan "Managing TinyVPN Client: $config_name" bold
+        fi
+        echo
+        
+        # Get current status
+        local status="inactive"
+        if systemctl is-active --quiet "${service_prefix}-${config_name}"; then
+            status="active"
+        fi
+        
+        if [ "$status" = "active" ]; then
+            colorize green "Status: $status" bold
+        else
+            colorize red "Status: $status" bold
+        fi
+        
+        echo
+        echo "1. View Configuration"
+        
+        if [ "$status" = "active" ]; then
+            echo "2. Stop Service"
+        else
+            echo "2. Start Service"
+        fi
+        
+        echo "3. Restart Service"
+        echo "4. View Logs"
+        echo "5. Delete Configuration"
+        echo "0. Back"
+        echo
+        
+        echo -ne "Enter option: "
+        read -r option
+        
+        case $option in
+            1)
+                clear
+                colorize cyan "Configuration Details:" bold
+                echo
+                
+                if [ "$config_type" = "server" ]; then
+                    local config=$(jq -r ".server_configs[] | select(.name == \"$config_name\")" "$TINYVPN_CONFIG_DB")
+                    
+                    echo "Name: $config_name"
+                    echo "Type: Server"
+                    echo "Port: $(echo "$config" | jq -r '.port')"
+                    echo "Subnet: $(echo "$config" | jq -r '.subnet')"
+                    echo "TUN Device: $(echo "$config" | jq -r '.tun_dev')"
+                    echo "Command: $(echo "$config" | jq -r '.command')"
+                    echo "Service File: $(echo "$config" | jq -r '.service')"
+                else
+                    local config=$(jq -r ".client_configs[] | select(.name == \"$config_name\")" "$TINYVPN_CONFIG_DB")
+                    
+                    echo "Name: $config_name"
+                    echo "Type: Client"
+                    echo "Server: $(echo "$config" | jq -r '.server_ip'):$(echo "$config" | jq -r '.port')"
+                    echo "Subnet: $(echo "$config" | jq -r '.subnet')"
+                    echo "TUN Device: $(echo "$config" | jq -r '.tun_dev')"
+                    echo "Command: $(echo "$config" | jq -r '.command')"
+                    echo "Service File: $(echo "$config" | jq -r '.service')"
+                fi
+                
+                echo
+                press_key
+                ;;
+            2)
+                if [ "$status" = "active" ]; then
+                    systemctl stop "${service_prefix}-${config_name}" &>/dev/null
+                    colorize yellow "Stopping ${config_type} service for $config_name..." bold
+                    sleep 2
+                    
+                    if ! systemctl is-active --quiet "${service_prefix}-${config_name}"; then
+                        colorize green "Service stopped successfully." bold
+                    else
+                        colorize red "Failed to stop service." bold
+                    fi
+                else
+                    systemctl start "${service_prefix}-${config_name}" &>/dev/null
+                    colorize yellow "Starting ${config_type} service for $config_name..." bold
+                    sleep 2
+                    
+                    if systemctl is-active --quiet "${service_prefix}-${config_name}"; then
+                        colorize green "Service started successfully." bold
+                    else
+                        colorize red "Failed to start service." bold
+                        colorize yellow "Checking logs:" bold
+                        journalctl -xeu "${service_prefix}-${config_name}" | tail -n 10
+                    fi
+                fi
+                
+                sleep 2
+                ;;
+            3)
+                systemctl restart "${service_prefix}-${config_name}" &>/dev/null
+                colorize yellow "Restarting ${config_type} service for $config_name..." bold
+                sleep 2
+                
+                if systemctl is-active --quiet "${service_prefix}-${config_name}"; then
+                    colorize green "Service restarted successfully." bold
+                else
+                    colorize red "Failed to restart service." bold
+                    colorize yellow "Checking logs:" bold
+                    journalctl -xeu "${service_prefix}-${config_name}" | tail -n 10
+                fi
+                
+                sleep 2
+                ;;
+            4)
+                clear
+                colorize cyan "Log for ${config_type} $config_name:" bold
+                echo
+                
+                local log_file="/var/log/${service_prefix}-${config_name}.log"
+                local error_log_file="/var/log/${service_prefix}-${config_name}.error.log"
+                
+                if [ -f "$log_file" ]; then
+                    tail -n 50 "$log_file"
+                else
+                    journalctl -xeu "${service_prefix}-${config_name}" | tail -n 50
+                fi
+                
+                echo
+                colorize cyan "Error log:" bold
+                echo
+                
+                if [ -f "$error_log_file" ]; then
+                    tail -n 20 "$error_log_file"
+                else
+                    colorize yellow "No error log file found." bold
+                fi
+                
+                echo
+                press_key
+                ;;
+            5)
+                clear
+                colorize red "Delete Configuration" bold
+                echo
+                
+                echo -ne "Are you sure you want to delete the ${config_type} configuration '$config_name'? (y/N): "
+                read -r confirm
+                
+                if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                    # Stop the service
+                    systemctl stop "${service_prefix}-${config_name}" &>/dev/null
+                    systemctl disable "${service_prefix}-${config_name}" &>/dev/null
+                    
+                    # Remove the service file
+                    local service_file=$(jq -r ".${config_type}_configs[] | select(.name == \"$config_name\") | .service" "$TINYVPN_CONFIG_DB")
+                    if [ -f "$service_file" ]; then
+                        rm -f "$service_file"
+                    fi
+                    
+                    # Remove from database
+                    local TEMP_CONFIG=$(mktemp)
+                    if [ "$config_type" = "server" ]; then
+                        jq --arg name "$config_name" '.server_configs = [.server_configs[] | select(.name != $name)]' "$TINYVPN_CONFIG_DB" > "$TEMP_CONFIG"
+                    else
+                        jq --arg name "$config_name" '.client_configs = [.client_configs[] | select(.name != $name)]' "$TINYVPN_CONFIG_DB" > "$TEMP_CONFIG"
+                    fi
+                    
+                    # Replace the original file with the updated one
+                    mv "$TEMP_CONFIG" "$TINYVPN_CONFIG_DB"
+                    
+                    systemctl daemon-reload &>/dev/null
+                    
+                    colorize green "Configuration deleted successfully." bold
+                    sleep 2
+                    return 0
+                else
+                    colorize yellow "Deletion cancelled." bold
+                    sleep 2
+                fi
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                colorize red "Invalid option." bold
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+tinyvpn_menu() {
+    initialize_tinyvpn_config_db
+    
+    while true; do
+        clear
+        colorize cyan "════════ TinyVPN Management ════════" bold
+        echo
+        colorize green "1. Configure TinyVPN Server" bold
+        colorize green "2. Configure TinyVPN Client" bold
+        colorize green "3. List All Configurations" bold
+        colorize green "4. Manage Configurations" bold
+        echo
+        colorize yellow "0. Back to Main Menu" bold
+        echo
+        echo "────────────────────────────────────"
+        
+        echo -ne "Enter option: "
+        read -r option
+        
+        case $option in
+            1)
+                configure_tinyvpn_server_multi
+                ;;
+            2)
+                configure_tinyvpn_client_multi_v2
+                ;;
+            3)
+                list_tinyvpn_configs
+                ;;
+            4)
+                manage_tinyvpn_config
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                colorize red "Invalid option." bold
+                sleep 2
+                ;;
+        esac
+    done
+}
