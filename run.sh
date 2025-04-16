@@ -14,10 +14,26 @@ print_colored() {
   esac
 }
 
-# Check if we're in the right directory (should have main.py)
-if [ ! -f "main.py" ]; then
-  print_colored "red" "Error: main.py not found directory."
-  print_colored "yellow" "Please run this script from the Gaming Tunnel root directory."
+# Repository info
+REPO_URL="https://github.com/EbadiDev/gaming-tunnel.git"
+REPO_DIR="gaming-tunnel"
+
+# Clone the repository if it doesn't exist
+if [ ! -d "$REPO_DIR" ]; then
+  print_colored "blue" "Cloning Gaming Tunnel repository..."
+  git clone $REPO_URL $REPO_DIR
+  print_colored "green" "Repository cloned successfully!"
+else
+  print_colored "yellow" "Gaming Tunnel repository already exists, using existing directory"
+fi
+
+# Change to repository directory
+cd $REPO_DIR
+
+# Check if we're in the right directory (should have main.py in test_phase)
+if [ ! -f "test_phase/main.py" ]; then
+  print_colored "red" "Error: main.py not found in the test_phase directory."
+  print_colored "yellow" "The repository structure may have changed or the clone was incomplete."
   exit 1
 fi
 
@@ -58,6 +74,7 @@ uv pip install -r requirements.txt
 
 # Run the application
 print_colored "green" "Starting Gaming Tunnel..."
+cd test_phase
 python ./main.py
 
 # Deactivate virtual environment on exit
