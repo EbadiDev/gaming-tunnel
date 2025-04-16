@@ -30,9 +30,9 @@ fi
 # Change to repository directory
 cd $REPO_DIR
 
-# Check if we're in the right directory (should have main.py in test_phase)
-if [ ! -f "test_phase/main.py" ]; then
-  print_colored "red" "Error: main.py not found in the test_phase directory."
+# Check if we're in the right directory (should have main.py in the root)
+if [ ! -f "main.py" ]; then
+  print_colored "red" "Error: main.py not found in the repository root directory."
   print_colored "yellow" "The repository structure may have changed or the clone was incomplete."
   exit 1
 fi
@@ -74,7 +74,6 @@ uv pip install -r requirements.txt
 
 # Run the application
 print_colored "green" "Starting Gaming Tunnel..."
-cd test_phase
 python ./main.py
 
 # Deactivate virtual environment on exit
