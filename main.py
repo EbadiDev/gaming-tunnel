@@ -912,18 +912,19 @@ class GamingTunnel:
         menu.add_row("1", "Configuration Management")
         menu.add_row("2", "Service Management")
         menu.add_row("3", "Network Statistics")
+        menu.add_row("4", "List Configurations")
         
         if not self.frp_installed:
-            menu.add_row("4", "Install FRP")
+            menu.add_row("5", "Install FRP")
         
         menu.add_row("0", "Exit")
         
         self.console.print(Panel(menu, title="Main Menu", border_style="cyan"))
         
         # Build choice array based on the options we're showing
-        choices = ["0", "1", "2", "3"]
+        choices = ["0", "1", "2", "3", "4"]
         if not self.frp_installed:
-            choices.append("4")
+            choices.append("5")
         
         choice = Prompt.ask("Enter your choice", choices=choices, default="0")
         
@@ -940,7 +941,10 @@ class GamingTunnel:
         elif choice == "3":  # Network Statistics
             self.network_stats()
             self.show_menu()
-        elif choice == "4" and not self.frp_installed:  # Install FRP
+        elif choice == "4":  # List Configurations
+            self.list_configs()
+            self.show_menu()
+        elif choice == "5" and not self.frp_installed:  # Install FRP
             self.install_frp()
             self.show_menu()
         elif choice == "0":  # Exit
