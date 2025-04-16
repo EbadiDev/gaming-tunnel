@@ -6,6 +6,7 @@ import json
 import socket
 import subprocess
 from typing import Optional, List, Dict
+from datetime import datetime
 
 import typer
 from rich.progress import track, Progress, SpinnerColumn, TextColumn
@@ -42,6 +43,11 @@ class GamingTunnel:
         self.server_info_cache_time = 0
         self.server_info_cache_ttl = 3600  # Extend cache TTL to 1 hour
         self.skip_server_info = False  # New flag to optionally skip server info display
+        
+        # Local storage for server info
+        self.server_info_file = os.path.join(self.dest_dir, "server_info.json")
+        # Load cached server info from file if it exists
+        self.load_server_info_from_file()
 
     def check_tinyvpn_installed(self):
         """Check if TinyVPN core is installed"""
@@ -61,6 +67,42 @@ class GamingTunnel:
         if bold:
             style = f"{color} bold"
         rich_print(f"[{style}]{text}[/{style}]")
+
+    def save_server_info_to_file(self, info: Dict[str, str]):
+        """Save server information to a local file"""
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(self.server_info_file), exist_ok=True)
+            
+            # Add timestamp to the data
+            info['timestamp'] = time.time()
+            
+            # Write to file
+            with open(self.server_info_file, 'w') as f:
+                json.dump(info, f)
+                
+            return True
+        except Exception as e:
+            # Silently fail, as this is not critical
+            return False
+    
+    def load_server_info_from_file(self):
+        """Load server information from the local file if it exists and is not too old"""
+        try:
+            if os.path.exists(self.server_info_file):
+                with open(self.server_info_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Check if data is still fresh (within TTL)
+                current_time = time.time()
+                if 'timestamp' in data and (current_time - data['timestamp']) < self.server_info_cache_ttl:
+                    self.server_info_cache = data
+                    self.server_info_cache_time = data['timestamp']
+                    return True
+            return False
+        except Exception:
+            # If any error occurs, just return False
+            return False
 
     def install_dependencies(self):
         """Install TinyVPN and UDP2RAW binaries based on system architecture"""
@@ -150,11 +192,11 @@ class GamingTunnel:
             self.colorize("red", "Failed to install components...", bold=True)
             return False
 
-    def get_server_info(self) -> Dict[str, str]:
+    def get_server_info(self, force_refresh=False) -> Dict[str, str]:
         """Fetch server information including IP, location, and datacenter"""
         # Return cached server info if it's still valid
         current_time = time.time()
-        if self.server_info_cache and (current_time - self.server_info_cache_time) < self.server_info_cache_ttl:
+        if not force_refresh and self.server_info_cache and (current_time - self.server_info_cache_time) < self.server_info_cache_ttl:
             return self.server_info_cache
         
         info = {}
@@ -189,6 +231,9 @@ class GamingTunnel:
         self.server_info_cache = info
         self.server_info_cache_time = current_time
         
+        # Save to file for future use
+        self.save_server_info_to_file(info)
+        
         return info
 
     def display_status(self, force_refresh=False):
@@ -196,12 +241,8 @@ class GamingTunnel:
         # If skip_server_info is True and we're not forcing a refresh, return early
         if self.skip_server_info and not force_refresh:
             return
-            
-        if force_refresh:
-            # Reset cache time to force refresh
-            self.server_info_cache_time = 0
-            
-        info = self.get_server_info()
+        
+        info = self.get_server_info(force_refresh)
         
         table = Table(show_header=False, box=None)
         table.add_column("Property", style="green")
@@ -212,6 +253,11 @@ class GamingTunnel:
             table.add_row("IPv6", info["ipv6"])
         table.add_row("Location", f"{info['city']}, {info['region']}, {info['country']}")
         table.add_row("Datacenter", info["isp"])
+        
+        # Add a last updated timestamp
+        if 'timestamp' in info:
+            last_updated = datetime.fromtimestamp(info['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+            table.add_row("Last Updated", last_updated)
         
         self.console.print(Panel(table, title="Server Information", border_style="cyan"))
 
@@ -614,6 +660,7 @@ class GamingTunnel:
         elif choice == "8":
             self.udp2raw.remove_service()
         elif choice == "9":
+            # Force refresh by passing True
             self.display_status(force_refresh=True)
             input("\nPress Enter to continue...")
             self.service_menu(show_status=True)
