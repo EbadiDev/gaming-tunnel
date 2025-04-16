@@ -52,39 +52,47 @@ if [ ! -f "main.py" ]; then
 fi
 
 # Install uv if it's not already installed
-if ! command -v uv &> /dev/null; then
+if command -v uv &> /dev/null; then
+  print_colored "green" "uv is already installed at $(which uv)"
+  # Make sure we know where the binary is for later use
+  UV_PATH=$(which uv)
+else
   print_colored "blue" "Installing uv package manager..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
   
-  # Add the uv binary path to PATH for this session
-  export PATH="$HOME/.local/bin:$PATH"
+  # Add standard uv installation paths to PATH for this session
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
   
   # Check if uv is now in PATH
-  if ! command -v uv &> /dev/null; then
-    print_colored "yellow" "uv command not found in PATH. Trying to use absolute path..."
-    UV_PATH="$HOME/.local/bin/uv"
+  if command -v uv &> /dev/null; then
+    UV_PATH=$(which uv)
+    print_colored "green" "uv installed successfully at $UV_PATH"
+  else
+    print_colored "yellow" "uv command not found in PATH. Trying common installation locations..."
     
-    if [ ! -f "$UV_PATH" ]; then
-      print_colored "red" "Could not find uv executable. Please add ~/.local/bin to your PATH manually."
-      print_colored "yellow" "You can do this by running: export PATH=\$HOME/.local/bin:\$PATH"
+    # Check common installation locations
+    for possible_path in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv" "/usr/local/bin/uv"; do
+      if [ -f "$possible_path" ]; then
+        UV_PATH="$possible_path"
+        print_colored "green" "Found uv at $UV_PATH"
+        export PATH="$(dirname $UV_PATH):$PATH"
+        break
+      fi
+    done
+    
+    if [ -z "$UV_PATH" ]; then
+      print_colored "red" "Could not find uv executable after installation."
+      print_colored "yellow" "Please add the installation directory to your PATH manually."
       exit 1
     fi
-  else
-    print_colored "green" "uv command is now available in PATH"
   fi
-else
-  print_colored "green" "uv is already installed"
 fi
 
 # Create and activate virtual environment
 print_colored "blue" "Creating Python virtual environment..."
 if [ ! -d ".venv" ]; then
-  # Use absolute path if needed
-  if command -v uv &> /dev/null; then
-    uv venv --python 3.13 || uv venv
-  else
-    "$HOME/.local/bin/uv" venv --python 3.13 || "$HOME/.local/bin/uv" venv
-  fi
+  # Use the UV_PATH variable we set earlier
+  "$UV_PATH" venv --python 3.13 || "$UV_PATH" venv
 else
   print_colored "yellow" "Virtual environment already exists, using existing .venv"
 fi
@@ -105,12 +113,8 @@ fi
 
 # Install dependencies
 print_colored "blue" "Installing dependencies..."
-# Use absolute path if needed
-if command -v uv &> /dev/null; then
-  uv pip install -r requirements.txt
-else
-  "$HOME/.local/bin/uv" pip install -r requirements.txt
-fi
+# Use the UV_PATH variable for pip commands
+"$UV_PATH" pip install -r requirements.txt
 
 # Run the application
 print_colored "green" "Starting Gaming Tunnel..."
