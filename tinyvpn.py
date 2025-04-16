@@ -14,12 +14,15 @@ from rich import print as rich_print
 
 class TinyVPN:
     def __init__(self):
+        """Initialize the TinyVPN class"""
         self.console = Console()
-        self.base_dir = "/root/gamingtunnel"
-        self.binary_path = os.path.join(self.base_dir, "tinyvpn")
+        # Use user's home directory for more accessibility
+        self.home_dir = os.path.expanduser("~")
+        self.base_dir = os.path.join(self.home_dir, ".gamingtunnel")
         self.configs_dir = os.path.join(self.base_dir, "configs")
+        self.binary_path = os.path.join(self.base_dir, "tinyvpn")
         
-        # Create configs directory if it doesn't exist
+        # Ensure directories exist
         if not os.path.isdir(self.configs_dir):
             os.makedirs(self.configs_dir, exist_ok=True)
     
@@ -241,74 +244,69 @@ WantedBy=multi-user.target
     
     def install_service(self, config_name: str, service_file: str) -> bool:
         """Install and start a systemd service"""
-        self.colorize("yellow", "Installing and starting service...", bold=True)
-        
-        # Determine if this is a server or client service based on the service filename
-        is_server = "-server.service" in service_file
-        is_client = "-client.service" in service_file
-        service_type = "server" if is_server else "client" if is_client else ""
-        service_name = f"tinyvpn-{config_name}-{service_type}"
-        
-        # Copy service file to systemd directory
         try:
-            # Copy service file
-            result = subprocess.run(
-                ["sudo", "cp", service_file, "/etc/systemd/system/"],
-                capture_output=True,
-                text=True
-            )
+            # Create a services directory in the user's home directory
+            service_dir = os.path.join(self.base_dir, "services")
+            os.makedirs(service_dir, exist_ok=True)
             
-            if result.returncode != 0:
-                self.colorize("red", "Failed to copy service file. You may need to manually install it.", bold=True)
-                self.colorize("cyan", f"sudo cp {service_file} /etc/systemd/system/", bold=False)
-                return False
+            # Determine if it's a server or client service
+            service_name = os.path.basename(service_file)
+            is_server = "server" in service_name
             
-            # Reload systemd and enable/start service
-            result = subprocess.run(
-                ["sudo", "systemctl", "daemon-reload"],
-                capture_output=True,
-                text=True
-            )
+            # Copy the service file to the user's services directory
+            user_service_file = os.path.join(service_dir, service_name)
+            with open(service_file, 'r') as src:
+                with open(user_service_file, 'w') as dst:
+                    dst.write(src.read())
             
-            if result.returncode != 0:
-                self.colorize("red", "Failed to reload systemd. You may need to manually install it.", bold=True)
-                self.colorize("cyan", f"sudo systemctl daemon-reload", bold=False)
-                self.colorize("cyan", f"sudo systemctl enable --now {service_name}.service", bold=False)
-                return False
+            self.colorize("green", f"Created service file: {user_service_file}", bold=True)
+            
+            # Try to install the service if we have permission
+            try:
+                systemd_dir = "/etc/systemd/system"
+                if os.access(systemd_dir, os.W_OK):
+                    system_service_file = os.path.join(systemd_dir, service_name)
+                    
+                    # Copy the service file to systemd directory
+                    with open(service_file, 'r') as src:
+                        with open(system_service_file, 'w') as dst:
+                            dst.write(src.read())
+                    
+                    # Reload systemd daemon
+                    subprocess.run(["systemctl", "daemon-reload"], check=True)
+                    
+                    # Enable and start the service
+                    subprocess.run(["systemctl", "enable", service_name], check=True)
+                    subprocess.run(["systemctl", "start", service_name], check=True)
+                    
+                    self.colorize("green", f"Service {service_name} installed and started successfully", bold=True)
+                else:
+                    self.colorize("yellow", "No permission to install system service. Manual installation required:", bold=True)
+                    print(f"To install the service, run these commands as root:")
+                    print(f"  sudo cp {user_service_file} /etc/systemd/system/")
+                    print(f"  sudo systemctl daemon-reload")
+                    print(f"  sudo systemctl enable {service_name}")
+                    print(f"  sudo systemctl start {service_name}")
+            except Exception as e:
+                self.colorize("yellow", f"Could not install system service: {str(e)}", bold=True)
+                print(f"To install the service, run these commands as root:")
+                print(f"  sudo cp {user_service_file} /etc/systemd/system/")
+                print(f"  sudo systemctl daemon-reload")
+                print(f"  sudo systemctl enable {service_name}")
+                print(f"  sudo systemctl start {service_name}")
                 
-            # Now enable and start the service
-            result = subprocess.run(
-                ["sudo", "systemctl", "enable", "--now", f"{service_name}.service"],
-                capture_output=True,
-                text=True
-            )
+            # Save client information file (useful for client configuration)
+            if is_server:
+                config_path = os.path.join(self.configs_dir, config_name)
+                client_info_file = os.path.join(config_path, "client_info.txt")
+                if os.path.exists(client_info_file):
+                    self.colorize("green", f"Client configuration information saved to {client_info_file}", bold=True)
+                    print("\nCommand to view client configuration information:")
+                    print(f"cat {client_info_file}")
             
-            if result.returncode != 0:
-                self.colorize("red", "Failed to enable and start service. You may need to manually start it.", bold=True)
-                self.colorize("red", f"Error: {result.stderr}", bold=True)
-                
-                # Try to get the detailed service status for debugging
-                status_result = subprocess.run(
-                    ["sudo", "systemctl", "status", f"{service_name}.service"],
-                    capture_output=True,
-                    text=True
-                )
-                if status_result.returncode == 0:
-                    self.colorize("yellow", "Service status:", bold=True)
-                    print(status_result.stdout)
-                
-                self.colorize("cyan", f"sudo systemctl enable --now {service_name}.service", bold=False)
-                return False
-            
-            self.colorize("green", f"Service {service_name} installed and started successfully!", bold=True)
             return True
-            
         except Exception as e:
-            self.colorize("red", f"Error installing service: {str(e)}", bold=True)
-            self.colorize("yellow", "You may need to manually install the service:", bold=True)
-            self.colorize("cyan", f"sudo cp {service_file} /etc/systemd/system/", bold=False)
-            self.colorize("cyan", f"sudo systemctl daemon-reload", bold=False)
-            self.colorize("cyan", f"sudo systemctl enable --now {service_name}.service", bold=False)
+            self.colorize("red", f"Failed to install service: {str(e)}", bold=True)
             return False
     
     def modify_server_config(self, config_name: str) -> bool:

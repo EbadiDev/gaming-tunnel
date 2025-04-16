@@ -7,6 +7,7 @@ import string
 import tarfile
 import tempfile
 import requests
+import shutil
 from typing import Optional, List, Dict
 from rich import print as rich_print
 from rich.console import Console
@@ -19,17 +20,28 @@ class FRP:
     def __init__(self):
         """Initialize FRP class"""
         self.console = Console()
-        self.configs_dir = "/etc/frp"
-        self.log_dir = "/var/log/frp"
-        self.frps_binary = "/usr/local/bin/frps"
-        self.frpc_binary = "/usr/local/bin/frpc"
+        # Use user's home directory for more accessibility
+        self.home_dir = os.path.expanduser("~")
+        self.base_dir = os.path.join(self.home_dir, ".gamingtunnel")
+        
+        # Update paths to be user-accessible
+        self.bin_dir = os.path.join(self.base_dir, "bin")
+        self.configs_dir = os.path.join(self.base_dir, "frp_configs")
+        self.log_dir = os.path.join(self.base_dir, "logs")
+        
+        # Update binary paths
+        self.frps_binary = os.path.join(self.bin_dir, "frps")
+        self.frpc_binary = os.path.join(self.bin_dir, "frpc")
+        
         self.github_release_url = "https://github.com/fatedier/frp/releases/latest"
         self.github_download_url = "https://github.com/fatedier/frp/releases/download"
-        self.default_frp_port = 805
+        self.version_url = "https://api.github.com/repos/fatedier/frp/releases/latest"
+        self.default_frp_port = 7000
         
         # Create necessary directories
         os.makedirs(self.configs_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(self.bin_dir, exist_ok=True)
 
     def colorize(self, color, text, bold=False):
         """Print colored text using rich"""
@@ -45,7 +57,7 @@ class FRP:
     def get_latest_version(self) -> str:
         """Get the latest FRP version from GitHub releases"""
         try:
-            response = requests.get(self.github_release_url, allow_redirects=True)
+            response = requests.get(self.version_url, allow_redirects=True)
             # Extract version from URL redirect (e.g., .../tag/v0.62.0)
             version = response.url.split('/')[-1]
             if version.startswith('v'):
@@ -71,64 +83,76 @@ class FRP:
         return f"{self.github_download_url}/v{version}/frp_{version}_{arch_suffix}.tar.gz"
     
     def install(self, version: str = None, arch: str = None) -> bool:
-        """Download and install FRP binaries"""
-        import platform
-        
+        """Install FRP binaries"""
         if version is None:
             version = self.get_latest_version()
             
         if arch is None:
             arch = platform.machine()
-            
+            if arch == "x86_64":
+                arch = "amd64"
+            elif arch in ["armv7l", "aarch64"]:
+                arch = "arm64"  # Most common ARM architecture
+            else:
+                self.colorize("red", f"Unsupported architecture: {arch}", bold=True)
+                return False
+                
+        # Get download URL for the specific version and architecture
         download_url = self.get_download_url(version, arch)
         if not download_url:
             return False
             
-        self.colorize("cyan", f"Downloading FRP v{version} for {arch}...", bold=True)
-        
-        try:
-            # Create a temporary directory for extraction
-            with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a temporary directory for downloading
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
                 # Download the tar.gz file
-                response = requests.get(download_url, stream=True)
-                tar_file = os.path.join(temp_dir, f"frp_{version}.tar.gz")
+                self.colorize("cyan", f"Downloading FRP {version} for {arch}...", bold=True)
+                tarball_path = os.path.join(temp_dir, "frp.tar.gz")
                 
-                with open(tar_file, 'wb') as f:
+                response = requests.get(download_url, stream=True)
+                with open(tarball_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                
-                # Extract the tar.gz file
-                with tarfile.open(tar_file) as tar:
+                        
+                # Extract the tarball
+                self.colorize("cyan", "Extracting FRP...", bold=True)
+                with tarfile.open(tarball_path, 'r:gz') as tar:
                     tar.extractall(path=temp_dir)
-                
+                    
                 # Find the extracted directory
-                extracted_dirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d)) and d.startswith('frp_')]
-                
-                if not extracted_dirs:
-                    self.colorize("red", "Failed to find extracted FRP directory", bold=True)
+                extracted_dir = None
+                for item in os.listdir(temp_dir):
+                    item_path = os.path.join(temp_dir, item)
+                    if os.path.isdir(item_path) and item.startswith("frp_"):
+                        extracted_dir = item_path
+                        break
+                        
+                if not extracted_dir:
+                    self.colorize("red", "Could not find extracted FRP directory", bold=True)
                     return False
+                    
+                # Install the binaries
+                self.colorize("cyan", "Installing FRP binaries...", bold=True)
                 
-                extracted_dir = os.path.join(temp_dir, extracted_dirs[0])
+                # Copy the executables to the user-accessible bin directory
+                shutil.copy2(os.path.join(extracted_dir, "frps"), self.frps_binary)
+                shutil.copy2(os.path.join(extracted_dir, "frpc"), self.frpc_binary)
                 
-                # Copy binaries to their final location
-                subprocess.run(["cp", os.path.join(extracted_dir, "frps"), self.frps_binary])
-                subprocess.run(["cp", os.path.join(extracted_dir, "frpc"), self.frpc_binary])
-                
-                # Make them executable
+                # Set executable permissions
                 os.chmod(self.frps_binary, 0o755)
                 os.chmod(self.frpc_binary, 0o755)
                 
-                # Copy example config files
+                # Create the configs directory and copy example configs
                 os.makedirs(self.configs_dir, exist_ok=True)
                 subprocess.run(["cp", os.path.join(extracted_dir, "frps.toml"), f"{self.configs_dir}/frps.toml.example"])
                 subprocess.run(["cp", os.path.join(extracted_dir, "frpc.toml"), f"{self.configs_dir}/frpc.toml.example"])
                 
-                self.colorize("green", f"FRP v{version} installed successfully", bold=True)
+                self.colorize("green", f"FRP {version} installed successfully", bold=True)
                 return True
                 
-        except Exception as e:
-            self.colorize("red", f"Failed to install FRP: {str(e)}", bold=True)
-            return False
+            except Exception as e:
+                self.colorize("red", f"Error installing FRP: {str(e)}", bold=True)
+                return False
             
     def get_available_configs(self) -> List[dict]:
         """Get a list of available FRP configurations"""
@@ -412,28 +436,69 @@ class FRP:
             return False
     
     def install_service(self, config_name: str, config_type: str) -> bool:
-        """Install and start a systemd service for FRP"""
-        service_name = f"frp{'s' if config_type == 'server' else 'c'}-{config_name}.service"
-        
+        """Install and start the FRP service"""
         try:
-            # Reload systemd daemon
-            subprocess.run(["systemctl", "daemon-reload"], check=True)
+            # Determine the binary and config file paths
+            binary = self.frps_binary if config_type == "server" else self.frpc_binary
+            config_file = f"{self.configs_dir}/frp{'s' if config_type == 'server' else 'c'}-{config_name}.toml"
+            service_suffix = "s" if config_type == "server" else "c"
             
-            # Enable the service to start at boot
-            subprocess.run(["systemctl", "enable", service_name], check=True)
+            # Create the service file in the user's home directory
+            service_dir = os.path.join(self.base_dir, "services")
+            os.makedirs(service_dir, exist_ok=True)
             
-            # Start the service
-            subprocess.run(["systemctl", "start", service_name], check=True)
+            service_file = os.path.join(service_dir, f"frp{service_suffix}-{config_name}.service")
             
-            self.colorize("green", f"Service {service_name} installed and started successfully", bold=True)
+            # Write the service file
+            with open(service_file, 'w') as f:
+                f.write(f"""[Unit]
+Description=FRP {'Server' if config_type == 'server' else 'Client'} Service for {config_name}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={binary} -c {config_file}
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+""")
+            
+            self.colorize("green", f"Created service file: {service_file}", bold=True)
+            
+            # Try to install the service file using systemd if running as root
+            try:
+                systemd_dir = "/etc/systemd/system"
+                if os.access(systemd_dir, os.W_OK):
+                    systemd_service_file = f"/etc/systemd/system/frp{service_suffix}-{config_name}.service"
+                    shutil.copy2(service_file, systemd_service_file)
+                    
+                    # Enable and start the service
+                    subprocess.run(["systemctl", "daemon-reload"], check=True)
+                    subprocess.run(["systemctl", "enable", f"frp{service_suffix}-{config_name}.service"], check=True)
+                    subprocess.run(["systemctl", "start", f"frp{service_suffix}-{config_name}.service"], check=True)
+                    
+                    self.colorize("green", f"FRP {config_type} service installed and started", bold=True)
+                else:
+                    self.colorize("yellow", "No permission to install system service. Manual installation required:", bold=True)
+                    print(f"To install the service, run these commands as root:")
+                    print(f"  sudo cp {service_file} /etc/systemd/system/")
+                    print(f"  sudo systemctl daemon-reload")
+                    print(f"  sudo systemctl enable frp{service_suffix}-{config_name}.service")
+                    print(f"  sudo systemctl start frp{service_suffix}-{config_name}.service")
+            except Exception as e:
+                self.colorize("yellow", f"Could not install system service: {str(e)}", bold=True)
+                print(f"To install the service, run these commands as root:")
+                print(f"  sudo cp {service_file} /etc/systemd/system/")
+                print(f"  sudo systemctl daemon-reload")
+                print(f"  sudo systemctl enable frp{service_suffix}-{config_name}.service")
+                print(f"  sudo systemctl start frp{service_suffix}-{config_name}.service")
+            
             return True
-            
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             self.colorize("red", f"Failed to install service: {str(e)}", bold=True)
-            self.colorize("yellow", "You can manually install the service with these commands:", bold=True)
-            print(f"sudo systemctl daemon-reload")
-            print(f"sudo systemctl enable {service_name}")
-            print(f"sudo systemctl start {service_name}")
             return False
     
     def configure_server(self):

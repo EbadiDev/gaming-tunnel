@@ -29,10 +29,20 @@ class GamingTunnel:
         self.udp2raw = UDP2Raw()
         self.frp = FRP()
         self.console = Console()
-        self.dest_dir = "/root/gamingtunnel"
-        self.config_dir = "/root/gamingtunnel"
-        self.tinyvpn_file = "/root/gamingtunnel/tinyvpn"
-        self.udp2raw_file = "/root/gamingtunnel/udp2raw"
+        
+        # Use a more accessible base directory
+        self.home_dir = os.path.expanduser("~")
+        self.dest_dir = os.path.join(self.home_dir, ".gamingtunnel")
+        self.config_dir = os.path.join(self.dest_dir, "configs")
+        
+        # Ensure directories exist
+        os.makedirs(self.dest_dir, exist_ok=True)
+        os.makedirs(self.config_dir, exist_ok=True)
+        
+        # Update paths
+        self.tinyvpn_file = os.path.join(self.dest_dir, "tinyvpn")
+        self.udp2raw_file = os.path.join(self.dest_dir, "udp2raw")
+        
         self.url_x86 = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_amd64"
         self.url_arm = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_arm"
         self.url_udp2raw = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_amd64"
@@ -381,21 +391,65 @@ class GamingTunnel:
         """List all existing configurations"""
         if not self.cores_installed and not self.frp_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
+            input("\nPress Enter to return to main menu...")
             return
 
         self.console.clear()
         
+        # Try to ensure config directories exist and check permissions
+        try:
+            os.makedirs(self.tinyvpn.configs_dir, exist_ok=True)
+            os.makedirs(self.udp2raw.configs_dir, exist_ok=True)
+            if self.frp_installed:
+                os.makedirs(self.frp.configs_dir, exist_ok=True)
+        except PermissionError:
+            self.colorize("red", "Error: Cannot create configuration directories due to permission issues.", bold=True)
+            self.colorize("yellow", "Try running the application with sudo or as root.", bold=True)
+            
+            # Print configuration path information
+            print("\nConfiguration paths:")
+            print(f"TinyVPN: {self.tinyvpn.configs_dir}")
+            print(f"UDP2RAW: {self.udp2raw.configs_dir}")
+            if self.frp_installed:
+                print(f"FRP: {self.frp.configs_dir}")
+            
+            input("\nPress Enter to return to main menu...")
+            return
+        
         # Get TinyVPN configurations
-        tinyvpn_configs = self.tinyvpn.get_available_configs()
+        try:
+            tinyvpn_configs = self.tinyvpn.get_available_configs()
+        except Exception as e:
+            self.colorize("red", f"Error reading TinyVPN configurations: {str(e)}", bold=True)
+            tinyvpn_configs = []
         
         # Get UDP2Raw configurations
-        udp2raw_configs = self.udp2raw.get_available_configs()
+        try:
+            udp2raw_configs = self.udp2raw.get_available_configs()
+        except Exception as e:
+            self.colorize("red", f"Error reading UDP2RAW configurations: {str(e)}", bold=True)
+            udp2raw_configs = []
 
         # Get FRP configurations
-        frp_configs = self.frp.get_available_configs()
+        frp_configs = []
+        if self.frp_installed:
+            try:
+                frp_configs = self.frp.get_available_configs()
+            except Exception as e:
+                self.colorize("red", f"Error reading FRP configurations: {str(e)}", bold=True)
         
         if not tinyvpn_configs and not udp2raw_configs and not frp_configs:
             self.colorize("yellow", "No configurations found", bold=True)
+            self.colorize("cyan", "\nYou can create a new configuration from the Configuration Management menu.", bold=True)
+            
+            # Print configuration path information
+            print("\nConfiguration paths:")
+            print(f"TinyVPN: {self.tinyvpn.configs_dir}" + (" (writable)" if os.access(self.tinyvpn.configs_dir, os.W_OK) else " (not writable)"))
+            print(f"UDP2RAW: {self.udp2raw.configs_dir}" + (" (writable)" if os.access(self.udp2raw.configs_dir, os.W_OK) else " (not writable)"))
+            if self.frp_installed:
+                print(f"FRP: {self.frp.configs_dir}" + (" (writable)" if os.access(self.frp.configs_dir, os.W_OK) else " (not writable)"))
+            
+            input("\nPress Enter to return to main menu...")
             return
         
         while True:
@@ -882,6 +936,51 @@ class GamingTunnel:
             time.sleep(1)
         
         self.colorize("green", "All configurations restarted successfully", bold=True)
+
+    def network_stats(self):
+        """Display network statistics for TinyVPN configurations"""
+        if not self.cores_installed:
+            self.colorize("red", "Core components not installed. Please install them first.", bold=True)
+            input("\nPress Enter to continue...")
+            return
+        
+        self.console.clear()
+        
+        # Get TinyVPN configurations
+        try:
+            tinyvpn_configs = self.tinyvpn.get_available_configs()
+        except Exception as e:
+            self.colorize("red", f"Error reading TinyVPN configurations: {str(e)}", bold=True)
+            input("\nPress Enter to continue...")
+            return
+        
+        if not tinyvpn_configs:
+            self.colorize("yellow", "No TinyVPN configurations found", bold=True)
+            self.colorize("cyan", "\nYou can create a new configuration from the Configuration Management menu.", bold=True)
+            input("\nPress Enter to continue...")
+            return
+        
+        # Display configurations
+        self.colorize("cyan", "Available TinyVPN configurations:", bold=True)
+        
+        for i, config in enumerate(tinyvpn_configs, 1):
+            print(f"{i}. {config['name']} ({config['type']})")
+        
+        config_idx = IntPrompt.ask("Select a configuration to view network statistics", default=1)
+        if 1 <= config_idx <= len(tinyvpn_configs):
+            config_name = tinyvpn_configs[config_idx - 1]['name']
+            self.console.clear()
+            try:
+                self.tinyvpn.show_network_usage(config_name)
+            except PermissionError:
+                self.colorize("red", "Error: Cannot access network statistics due to permission issues.", bold=True)
+                self.colorize("yellow", "Try running the application with sudo or as root to access network statistics.", bold=True)
+            except Exception as e:
+                self.colorize("red", f"Error reading network statistics: {str(e)}", bold=True)
+        else:
+            self.colorize("red", "Invalid selection", bold=True)
+        
+        input("\nPress Enter to continue...")
 
     def show_menu(self):
         """Show main menu"""
