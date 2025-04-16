@@ -36,6 +36,11 @@ class GamingTunnel:
         self.tinyvpn_installed = self.check_tinyvpn_installed()
         self.udp2raw_installed = self.check_udp2raw_installed()
         self.cores_installed = self.tinyvpn_installed and self.udp2raw_installed
+        
+        # Server info cache
+        self.server_info_cache = None
+        self.server_info_cache_time = 0
+        self.server_info_cache_ttl = 300  # Cache TTL in seconds (5 minutes)
 
     def check_tinyvpn_installed(self):
         """Check if TinyVPN core is installed"""
@@ -146,23 +151,28 @@ class GamingTunnel:
 
     def get_server_info(self) -> Dict[str, str]:
         """Fetch server information including IP, location, and datacenter"""
+        # Return cached server info if it's still valid
+        current_time = time.time()
+        if self.server_info_cache and (current_time - self.server_info_cache_time) < self.server_info_cache_ttl:
+            return self.server_info_cache
+        
         info = {}
         
         # Get IPv4 address
         try:
-            info["ipv4"] = requests.get("https://api.ipify.org").text
+            info["ipv4"] = requests.get("https://api.ipify.org", timeout=3).text
         except Exception:
             info["ipv4"] = "Unknown"
         
         # Get IPv6 address if available
         try:
-            info["ipv6"] = requests.get("https://api6.ipify.org").text
+            info["ipv6"] = requests.get("https://api6.ipify.org", timeout=3).text
         except Exception:
             info["ipv6"] = None
         
         # Get location and datacenter information
         try:
-            response = requests.get(f"http://ipwhois.app/json/{info['ipv4']}")
+            response = requests.get(f"http://ipwhois.app/json/{info['ipv4']}", timeout=3)
             data = response.json()
             info["country"] = data.get("country", "Unknown")
             info["isp"] = data.get("isp", "Unknown")
@@ -174,10 +184,18 @@ class GamingTunnel:
             info["region"] = "Unknown"
             info["city"] = "Unknown"
         
+        # Update cache
+        self.server_info_cache = info
+        self.server_info_cache_time = current_time
+        
         return info
 
-    def display_status(self):
+    def display_status(self, force_refresh=False):
         """Display server status information"""
+        if force_refresh:
+            # Reset cache time to force refresh
+            self.server_info_cache_time = 0
+            
         info = self.get_server_info()
         
         table = Table(show_header=False, box=None)
@@ -542,13 +560,17 @@ class GamingTunnel:
                 
                 input("\nPress Enter to continue...")
 
-    def service_menu(self):
+    def service_menu(self, show_status=False):
         """Show service management menu"""
         if not self.cores_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             return
         
         self.console.clear()
+        
+        # Optionally display server information
+        if show_status:
+            self.display_status()
         
         # Service menu
         menu = Table(show_header=True, box=None)
@@ -563,11 +585,12 @@ class GamingTunnel:
         menu.add_row("6", "View UDP2RAW Logs")
         menu.add_row("7", "Restart UDP2RAW Service")
         menu.add_row("8", "Remove UDP2RAW Service")
+        menu.add_row("9", "Update Server Information")
         menu.add_row("0", "Return to main menu")
         
         self.console.print(Panel(menu, title="Service Management", border_style="cyan"))
         
-        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8"], default="0")
+        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], default="0")
         
         if choice == "1":
             self.tinyvpn.check_service_status()
@@ -585,6 +608,11 @@ class GamingTunnel:
             self.udp2raw.restart_service()
         elif choice == "8":
             self.udp2raw.remove_service()
+        elif choice == "9":
+            self.display_status(force_refresh=True)
+            input("\nPress Enter to continue...")
+            self.service_menu(show_status=True)
+            return
         elif choice == "0":
             return
 
@@ -648,81 +676,58 @@ class GamingTunnel:
         self.colorize("green", "All configurations restarted successfully", bold=True)
 
     def show_menu(self):
-        """Display the main menu and handle user selection"""
-        while True:
+        """Show main menu"""
+        self.console.clear()
+        
+        # Server information
+        self.display_status()
+        
+        # Display installed components
+        components = Table(show_header=False, box=None)
+        components.add_column("Component", style="cyan")
+        components.add_column("Status", style="green")
+        
+        components.add_row("TinyVPN", "Installed ✓" if self.tinyvpn_installed else "Not Installed ✗")
+        components.add_row("UDP2RAW", "Installed ✓" if self.udp2raw_installed else "Not Installed ✗")
+        
+        self.console.print(Panel(components, title="Components", border_style="cyan"))
+        
+        # Main menu
+        menu = Table(show_header=True, box=None)
+        menu.add_column("Option", style="cyan", justify="center")
+        menu.add_column("Description", style="green")
+        
+        if not self.cores_installed:
+            menu.add_row("1", "Install Core Components")
+        menu.add_row("2", "Configuration Management")
+        menu.add_row("3", "Service Management")
+        menu.add_row("4", "Network Statistics")
+        menu.add_row("0", "Exit")
+        
+        self.console.print(Panel(menu, title="Main Menu", border_style="cyan"))
+        
+        choices = ["0", "2", "3", "4"]
+        if not self.cores_installed:
+            choices.append("1")
+        
+        choice = Prompt.ask("Enter your choice", choices=choices, default="0")
+        
+        if choice == "1" and not self.cores_installed:
+            self.install_dependencies()
+            self.show_menu()
+        elif choice == "2":
+            self.create_config()
+            self.show_menu()
+        elif choice == "3":
+            self.service_menu()  # Changed to not show status by default
+            self.show_menu()
+        elif choice == "4":
+            self.network_stats()
+            self.show_menu()
+        elif choice == "0":
             self.console.clear()
-            
-            # Display server information
-            self.display_status()
-            
-            # Display core components status
-            status_table = Table(show_header=True, box=None)
-            status_table.add_column("Component", style="blue")
-            status_table.add_column("Status", style="green")
-            
-            tinyvpn_status = "[green]Installed[/green]" if self.tinyvpn_installed else "[red]Not Installed[/red]"
-            udp2raw_status = "[green]Installed[/green]" if self.udp2raw_installed else "[red]Not Installed[/red]"
-            
-            status_table.add_row("TinyVPN Core", tinyvpn_status)
-            status_table.add_row("UDP2RAW Core", udp2raw_status)
-            
-            self.console.print(status_table)
-            self.console.print()
-            
-            # Display menu options
-            menu = Table(show_header=True, box=None)
-            menu.add_column("Option", style="cyan", justify="center")
-            menu.add_column("Description", style="green")
-            
-            if not self.cores_installed:
-                menu.add_row("1", "Install Core Components")
-            else:
-                menu.add_row("1", "Create a new configuration")
-                menu.add_row("2", "List all configurations")
-                menu.add_row("3", "Service management")
-                menu.add_row("4", "Restart all services")
-                menu.add_row("5", "Remove core components")
-            
-            menu.add_row("0", "Exit")
-            
-            self.console.print(Panel(menu, title="Gaming Tunnel Menu", border_style="cyan"))
-            
-            # Get user choice
-            if not self.cores_installed:
-                choice = Prompt.ask("Enter your choice", choices=["0", "1"], default="0")
-                
-                if choice == "1":
-                    self.install_dependencies()
-                    # Update installation status
-                    self.tinyvpn_installed = self.check_tinyvpn_installed()
-                    self.udp2raw_installed = self.check_udp2raw_installed()
-                    self.cores_installed = self.tinyvpn_installed and self.udp2raw_installed
-                elif choice == "0":
-                    self.colorize("yellow", "Exiting...", bold=True)
-                    break
-            else:
-                choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5"], default="0")
-                
-                if choice == "1":
-                    self.create_config()
-                elif choice == "2":
-                    self.list_configs()
-                elif choice == "3":
-                    self.service_menu()
-                elif choice == "4":
-                    self.restart_configs()
-                elif choice == "5":
-                    self.remove_core()
-                    # Update installation status
-                    self.tinyvpn_installed = self.check_tinyvpn_installed()
-                    self.udp2raw_installed = self.check_udp2raw_installed()
-                    self.cores_installed = self.tinyvpn_installed and self.udp2raw_installed
-                elif choice == "0":
-                    self.colorize("yellow", "Exiting...", bold=True)
-                    break
-            
-            # Pause before showing menu again
-            input("\nPress Enter to continue...")
+            self.console.print(Panel("Thank you for using [green]Gaming Tunnel[/green]!", border_style="cyan"))
+            sys.exit(0)
 
     def remove_all_services(self):
         pass
