@@ -334,7 +334,7 @@ class GamingTunnel:
         self.console.print(Panel(table, title="Server Information", border_style="cyan"))
 
     def create_config(self):
-        """Create a new configuration"""
+        """Create a new configuration or manage existing ones"""
         if not self.cores_installed and not self.frp_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             return
@@ -352,11 +352,12 @@ class GamingTunnel:
         menu.add_row("4", "Configure UDP2RAW Client")
         menu.add_row("5", "Configure FRP Server")
         menu.add_row("6", "Configure FRP Client")
+        menu.add_row("7", "List and Manage Existing Configurations")
         menu.add_row("0", "Return to main menu")
         
-        self.console.print(Panel(menu, title="Configuration Menu", border_style="cyan"))
+        self.console.print(Panel(menu, title="Configuration Management", border_style="cyan"))
         
-        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6"], default="0")
+        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7"], default="0")
         
         if choice == "1":
             self.tinyvpn.configure_server()
@@ -370,6 +371,8 @@ class GamingTunnel:
             self.frp.configure_server()
         elif choice == "6":
             self.frp.configure_client()
+        elif choice == "7":
+            self.list_configs()  # Add the list_configs function as an option
         elif choice == "0":
             return
 

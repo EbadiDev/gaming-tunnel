@@ -37,11 +37,29 @@ if [ ! -d "$INSTALL_DIR/src" ]; then
   git clone $REPO_URL "$INSTALL_DIR/src"
   print_colored "green" "Repository cloned successfully!"
 else
-  print_colored "blue" "Updating Gaming Tunnel repository to latest version..."
+  print_colored "blue" "Checking for repository updates..."
   cd "$INSTALL_DIR/src"
-  git stash -q # Stash any local changes
-  git pull
-  print_colored "green" "Repository updated successfully!"
+  
+  # Stash any local changes before checking for updates
+  git stash -q
+  
+  # Fetch from remote without applying changes
+  git fetch origin
+  
+  # Check if there are any changes to pull
+  LOCAL=$(git rev-parse @)
+  REMOTE=$(git rev-parse @{u})
+  
+  if [ "$LOCAL" != "$REMOTE" ]; then
+    print_colored "blue" "Updates found. Updating Gaming Tunnel repository..."
+    git pull
+    print_colored "green" "Repository updated successfully!"
+  else
+    print_colored "green" "Repository is already up to date."
+  fi
+  
+  # Apply stashed changes if any
+  git stash pop -q 2>/dev/null || true
 fi
 
 # Change to repository directory
