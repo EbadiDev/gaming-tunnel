@@ -42,14 +42,35 @@ if ! command -v uv &> /dev/null; then
   print_colored "blue" "Installing uv package manager..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
   
-  # Add uv to PATH for this session if it's not already there
-  export PATH="$HOME/.cargo/bin:$PATH"
+  # Add the uv binary path to PATH for this session
+  export PATH="$HOME/.local/bin:$PATH"
+  
+  # Check if uv is now in PATH
+  if ! command -v uv &> /dev/null; then
+    print_colored "yellow" "uv command not found in PATH. Trying to use absolute path..."
+    UV_PATH="$HOME/.local/bin/uv"
+    
+    if [ ! -f "$UV_PATH" ]; then
+      print_colored "red" "Could not find uv executable. Please add ~/.local/bin to your PATH manually."
+      print_colored "yellow" "You can do this by running: export PATH=\$HOME/.local/bin:\$PATH"
+      exit 1
+    fi
+  else
+    print_colored "green" "uv command is now available in PATH"
+  fi
+else
+  print_colored "green" "uv is already installed"
 fi
 
 # Create and activate virtual environment
 print_colored "blue" "Creating Python virtual environment..."
 if [ ! -d ".venv" ]; then
-  uv venv --python 3.13
+  # Use absolute path if needed
+  if command -v uv &> /dev/null; then
+    uv venv --python 3.13 || uv venv
+  else
+    "$HOME/.local/bin/uv" venv --python 3.13 || "$HOME/.local/bin/uv" venv
+  fi
 else
   print_colored "yellow" "Virtual environment already exists, using existing .venv"
 fi
@@ -70,7 +91,12 @@ fi
 
 # Install dependencies
 print_colored "blue" "Installing dependencies..."
-uv pip install -r requirements.txt
+# Use absolute path if needed
+if command -v uv &> /dev/null; then
+  uv pip install -r requirements.txt
+else
+  "$HOME/.local/bin/uv" pip install -r requirements.txt
+fi
 
 # Run the application
 print_colored "green" "Starting Gaming Tunnel..."
