@@ -1,5 +1,4 @@
-# GamingVPN
-
+# Gaming Tunnel
 
 A specialized VPN solution optimized for online gaming with low latency, packet loss reduction, and network optimization features.
 
@@ -11,69 +10,81 @@ A specialized VPN solution optimized for online gaming with low latency, packet 
 - **UDP2RAW Integration**: Encapsulates UDP traffic in TCP, ICMP, or fake-TCP packets to bypass network restrictions
 - **Cross-platform**: Supports both x86_64 and ARM architectures
 - **Systemd Service Management**: Easy to manage with systemd service configuration
+- **Modern Python Environment**: Uses uv package manager for fast, reliable dependency management
 
 ## Requirements
 
 - Linux-based operating system
 - Root access
-- `curl` and `jq` utilities (will be installed automatically if missing)
+- Git (for repository cloning)
+- Python 3.x
 
 ## Installation
 
-You can install and run GamingVPN with a single command:
+You can install and run Gaming Tunnel with a single command:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/run.sh)
+sudo bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/run.sh)
 ```
 
-This command will download and execute the script directly with root privileges.
+This command will:
+1. Clone the repository to `/root/gaming-tunnel/`
+2. Create the installation directory at `/root/gamingtunnel/`
+3. Install the `uv` package manager if not already installed
+4. Set up a Python virtual environment
+5. Install all required dependencies
+6. Launch the application
 
 ## Directory Structure
 
-After installation, GamingVPN uses the following directory structure:
+After installation, Gaming Tunnel uses the following directory structure:
+- `/root/gaming-tunnel/` - Repository code location
 - `/root/gamingtunnel/` - Main installation directory
-- `/root/gamingtunnel/tinyvpn` - The core GamingVPN binary
+- `/root/gamingtunnel/tinyvpn` - The core TinyVPN binary
 - `/root/gamingtunnel/udp2raw` - The UDP2RAW binary for traffic encapsulation
+- `/root/gamingtunnel/configs/` - Configuration files for your tunnels
 
 ## Usage
 
 ### Server Configuration
 
-1. Run the script and select option 1 (`Configure for server`)
-2. Configure the following options:
-   - Tunnel Port (default: 4096)
-   - FEC Value (Forward Error Correction, format: x:y, default: 2:1)
-   - Subnet Address (default: 10.22.22.0)
+1. Run the application and select option 1 (`Create a new configuration`)
+2. Select "Configure TinyVPN Server" and follow the prompts:
+   - Tunnel Port (default: 20002)
+   - FEC Value (Forward Error Correction, format: x:y, default: 2:4)
+   - Subnet Address (default: 10.22.23.0)
    - Mode (0 for non-game usage, 1 for game usage)
-   - MTU Value (default: 1250)
-   - UDP2RAW (optional):
-     - UDP2RAW listening port
-     - Password
-     - Raw mode (faketcp, udp, icmp)
+   - MTU Value (default: 1450)
+3. Optionally configure UDP2RAW server:
+   - Select "Configure UDP2RAW Server"
+   - Enter TinyVPN tunnel port (should match the TinyVPN configuration)
+   - Configure External UDP port
+   - Set password and raw mode (faketcp, udp, icmp)
 
 ### Client Configuration
 
-1. Run the script and select option 2 (`Configure for client`)
-2. Configure the following options:
-   - Remote Server Address (the IP of your GamingVPN server)
-   - Tunnel Port (must match server port)
+1. Run the application and select option 1 (`Create a new configuration`)
+2. Select "Configure TinyVPN Client" and follow the prompts:
+   - Server IP address
+   - Server port (must match server port)
    - FEC Value (should match server settings for best results)
    - Subnet Address (must match server subnet)
    - Mode (should match server settings)
    - MTU Value (should match server settings)
-   - UDP2RAW (optional, must be enabled on server):
-     - UDP2RAW local port
-     - Password (must match server password)
-     - Raw mode (must match server raw mode)
+3. Optionally configure UDP2RAW client:
+   - Select "Configure UDP2RAW Client"
+   - Enter TinyVPN tunnel port
+   - Configure External UDP port
+   - Enter the server IP address
+   - Set password and raw mode (must match server settings)
 
 ### Management
 
-The script provides several management options:
-- **Check service status**: View the status of the GamingVPN service
-- **View logs**: Check service logs for troubleshooting
-- **Restart service**: Restart the GamingVPN service
-- **Remove service**: Stop and remove the GamingVPN service
-- **Remove core files**: Delete the GamingVPN installation files
+The application provides several management options:
+- **List configurations**: View all TinyVPN and UDP2RAW configurations
+- **Service management**: Check status, view logs, restart or remove services
+- **Restart all services**: Restart all configured services at once
+- **Remove core components**: Delete the Gaming Tunnel installation files
 
 ## Technical Details
 
@@ -83,7 +94,7 @@ The FEC feature uses a x:y format where:
 - x: the number of redundant packets
 - y: the number of original packets
 
-For example, with FEC 2:1, for every original packet, 2 redundant packets are generated, allowing recovery from up to 2 packet losses.
+For example, with FEC 2:4, for every 4 original packets, 2 redundant packets are generated, allowing recovery from up to 2 packet losses in that group.
 
 ### UDP2RAW
 
@@ -98,17 +109,24 @@ If you encounter issues:
 
 1. Check the service status:
 ```bash
-systemctl status gamingtunnel.service
+systemctl status tinyvpn-<config_name>-server.service
+# or for clients
+systemctl status tinyvpn-<config_name>-client.service
+# or for UDP2RAW
+systemctl status udp2raw-<config_name>-server.service
 ```
 
-2. View detailed logs:
+2. View logs:
 ```bash
-journalctl -xeu gamingtunnel.service
+journalctl -u tinyvpn-<config_name>-server.service
 ```
 
-3. If using UDP2RAW, check its service status:
+3. If the installation script fails, you can try running the steps manually:
 ```bash
-systemctl status udp2raw.service
+cd /root
+git clone https://github.com/EbadiDev/gaming-tunnel.git
+cd gaming-tunnel
+python main.py
 ```
 
 ## License
