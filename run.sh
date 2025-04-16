@@ -31,13 +31,17 @@ if [ ! -d "$INSTALL_DIR" ]; then
   mkdir -p "$INSTALL_DIR"
 fi
 
-# Clone the repository if it doesn't exist
+# Clone or update the repository
 if [ ! -d "$INSTALL_DIR/src" ]; then
   print_colored "blue" "Cloning Gaming Tunnel repository..."
   git clone $REPO_URL "$INSTALL_DIR/src"
   print_colored "green" "Repository cloned successfully!"
 else
-  print_colored "yellow" "Gaming Tunnel repository already exists at $INSTALL_DIR/src"
+  print_colored "blue" "Updating Gaming Tunnel repository to latest version..."
+  cd "$INSTALL_DIR/src"
+  git stash -q # Stash any local changes
+  git pull
+  print_colored "green" "Repository updated successfully!"
 fi
 
 # Change to repository directory

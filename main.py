@@ -905,47 +905,42 @@ class GamingTunnel:
         menu.add_column("Option", style="cyan", justify="center")
         menu.add_column("Description", style="green")
         
-        if not self.cores_installed:
-            menu.add_row("1", "Install Core Components")
-        
-        menu.add_row("2", "Configuration Management")
-        menu.add_row("3", "Service Management")
-        menu.add_row("4", "Network Statistics")
+        # Always add the core options with sequential numbering
+        menu.add_row("1", "Configuration Management")
+        menu.add_row("2", "Service Management")
+        menu.add_row("3", "Network Statistics")
         
         if not self.frp_installed:
-            menu.add_row("5", "Install FRP")
+            menu.add_row("4", "Install FRP")
         
         menu.add_row("0", "Exit")
         
         self.console.print(Panel(menu, title="Main Menu", border_style="cyan"))
         
-        choices = ["0", "2", "3", "4"]
-        if not self.cores_installed:
-            choices.append("1")
+        # Build choice array based on the options we're showing
+        choices = ["0", "1", "2", "3"]
         if not self.frp_installed:
-            choices.append("5")
+            choices.append("4")
         
         choice = Prompt.ask("Enter your choice", choices=choices, default="0")
         
         # Set the skip_server_info flag to True for sub-menus to make them load faster
         self.skip_server_info = True
         
-        if choice == "1" and not self.cores_installed:
-            self.install_dependencies()
-            self.show_menu()
-        elif choice == "2":
+        # Map the user's choice to the appropriate action
+        if choice == "1":  # Configuration Management
             self.create_config()
             self.show_menu()
-        elif choice == "3":
+        elif choice == "2":  # Service Management
             self.service_menu()  # No need to show status by default, making it faster
             self.show_menu()
-        elif choice == "4":
+        elif choice == "3":  # Network Statistics
             self.network_stats()
             self.show_menu()
-        elif choice == "5" and not self.frp_installed:
+        elif choice == "4" and not self.frp_installed:  # Install FRP
             self.install_frp()
             self.show_menu()
-        elif choice == "0":
+        elif choice == "0":  # Exit
             self.console.clear()
             self.console.print(Panel("Thank you for using [green]Gaming Tunnel[/green]!", border_style="cyan"))
             sys.exit(0)
