@@ -40,7 +40,8 @@ class GamingTunnel:
         # Server info cache
         self.server_info_cache = None
         self.server_info_cache_time = 0
-        self.server_info_cache_ttl = 300  # Cache TTL in seconds (5 minutes)
+        self.server_info_cache_ttl = 3600  # Extend cache TTL to 1 hour
+        self.skip_server_info = False  # New flag to optionally skip server info display
 
     def check_tinyvpn_installed(self):
         """Check if TinyVPN core is installed"""
@@ -158,21 +159,21 @@ class GamingTunnel:
         
         info = {}
         
-        # Get IPv4 address
+        # Get IPv4 address with a shorter timeout
         try:
-            info["ipv4"] = requests.get("https://api.ipify.org", timeout=3).text
+            info["ipv4"] = requests.get("https://api.ipify.org", timeout=2).text
         except Exception:
             info["ipv4"] = "Unknown"
         
-        # Get IPv6 address if available
+        # Get IPv6 address if available with a shorter timeout
         try:
-            info["ipv6"] = requests.get("https://api6.ipify.org", timeout=3).text
+            info["ipv6"] = requests.get("https://api6.ipify.org", timeout=2).text
         except Exception:
             info["ipv6"] = None
         
-        # Get location and datacenter information
+        # Get location and datacenter information with a shorter timeout
         try:
-            response = requests.get(f"http://ipwhois.app/json/{info['ipv4']}", timeout=3)
+            response = requests.get(f"http://ipwhois.app/json/{info['ipv4']}", timeout=2)
             data = response.json()
             info["country"] = data.get("country", "Unknown")
             info["isp"] = data.get("isp", "Unknown")
@@ -192,6 +193,10 @@ class GamingTunnel:
 
     def display_status(self, force_refresh=False):
         """Display server status information"""
+        # If skip_server_info is True and we're not forcing a refresh, return early
+        if self.skip_server_info and not force_refresh:
+            return
+            
         if force_refresh:
             # Reset cache time to force refresh
             self.server_info_cache_time = 0
@@ -679,6 +684,9 @@ class GamingTunnel:
         """Show main menu"""
         self.console.clear()
         
+        # Set skip_server_info to False for the main menu, we want to see server info here
+        self.skip_server_info = False
+        
         # Server information
         self.display_status()
         
@@ -712,6 +720,9 @@ class GamingTunnel:
         
         choice = Prompt.ask("Enter your choice", choices=choices, default="0")
         
+        # Set the skip_server_info flag to True for sub-menus to make them load faster
+        self.skip_server_info = True
+        
         if choice == "1" and not self.cores_installed:
             self.install_dependencies()
             self.show_menu()
@@ -719,7 +730,7 @@ class GamingTunnel:
             self.create_config()
             self.show_menu()
         elif choice == "3":
-            self.service_menu()  # Changed to not show status by default
+            self.service_menu()  # No need to show status by default, making it faster
             self.show_menu()
         elif choice == "4":
             self.network_stats()
