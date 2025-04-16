@@ -17,7 +17,6 @@ print_colored() {
 # Repository info and paths
 REPO_URL="https://github.com/EbadiDev/gaming-tunnel.git"
 INSTALL_DIR="/root/gamingtunnel"
-CODE_DIR="/root/gaming-tunnel"
 
 # Make sure we have permission to create the directory
 if [ "$EUID" -ne 0 ]; then
@@ -33,16 +32,16 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 # Clone the repository if it doesn't exist
-if [ ! -d "$CODE_DIR" ]; then
+if [ ! -d "$INSTALL_DIR/src" ]; then
   print_colored "blue" "Cloning Gaming Tunnel repository..."
-  git clone $REPO_URL $CODE_DIR
+  git clone $REPO_URL "$INSTALL_DIR/src"
   print_colored "green" "Repository cloned successfully!"
 else
-  print_colored "yellow" "Gaming Tunnel repository already exists at $CODE_DIR"
+  print_colored "yellow" "Gaming Tunnel repository already exists at $INSTALL_DIR/src"
 fi
 
 # Change to repository directory
-cd $CODE_DIR
+cd "$INSTALL_DIR/src"
 
 # Check if main.py exists
 if [ ! -f "main.py" ]; then

@@ -12,9 +12,9 @@ from rich import print as rich_print
 class UDP2Raw:
     def __init__(self):
         self.console = Console()
-        self.base_dir = "gamingtunnel"
-        self.binary_path = f"{self.base_dir}/udp2raw"
-        self.configs_dir = f"{self.base_dir}/configs"
+        self.base_dir = "/root/gamingtunnel"
+        self.binary_path = os.path.join(self.base_dir, "udp2raw")
+        self.configs_dir = os.path.join(self.base_dir, "configs")
         self.default_tunnel_port = 20002  # Default port as a class variable
         
         # Create configs directory if it doesn't exist
@@ -192,8 +192,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-WorkingDirectory={os.path.abspath(self.base_dir)}
-ExecStart={os.path.abspath(self.binary_path)} {server_cmd}
+WorkingDirectory={self.base_dir}
+ExecStart={self.binary_path} {server_cmd}
 Restart=always
 RestartSec=1
 LimitNOFILE=infinity
@@ -295,8 +295,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-WorkingDirectory={os.path.abspath(self.base_dir)}
-ExecStart={os.path.abspath(self.binary_path)} {client_cmd}
+WorkingDirectory={self.base_dir}
+ExecStart={self.binary_path} {client_cmd}
 Restart=always
 RestartSec=1
 LimitNOFILE=infinity
@@ -344,15 +344,39 @@ WantedBy=multi-user.target
             
             # Reload systemd and enable/start service
             result = subprocess.run(
-                ["sudo", "systemctl", "daemon-reload", "&&", "sudo", "systemctl", "enable", "--now", service_name],
+                ["sudo", "systemctl", "daemon-reload"],
                 capture_output=True,
-                text=True,
-                shell=True  # Using shell=True to support command chaining with &&
+                text=True
+            )
+            
+            if result.returncode != 0:
+                self.colorize("red", "Failed to reload systemd. You may need to manually install it.", bold=True)
+                self.colorize("cyan", f"sudo systemctl daemon-reload", bold=False)
+                self.colorize("cyan", f"sudo systemctl enable --now {service_name}", bold=False)
+                return False
+                
+            # Now enable and start the service
+            result = subprocess.run(
+                ["sudo", "systemctl", "enable", "--now", service_name],
+                capture_output=True,
+                text=True
             )
             
             if result.returncode != 0:
                 self.colorize("red", "Failed to enable and start service. You may need to manually start it.", bold=True)
-                self.colorize("cyan", f"sudo systemctl daemon-reload && sudo systemctl enable --now {service_name}", bold=False)
+                self.colorize("red", f"Error: {result.stderr}", bold=True)
+                
+                # Try to get the detailed service status for debugging
+                status_result = subprocess.run(
+                    ["sudo", "systemctl", "status", service_name],
+                    capture_output=True,
+                    text=True
+                )
+                if status_result.returncode == 0:
+                    self.colorize("yellow", "Service status:", bold=True)
+                    print(status_result.stdout)
+                
+                self.colorize("cyan", f"sudo systemctl enable --now {service_name}", bold=False)
                 return False
             
             self.colorize("green", f"Service {service_name} installed and started successfully!", bold=True)
@@ -362,7 +386,8 @@ WantedBy=multi-user.target
             self.colorize("red", f"Error installing service: {str(e)}", bold=True)
             self.colorize("yellow", "You may need to manually install the service:", bold=True)
             self.colorize("cyan", f"sudo cp {service_file} /etc/systemd/system/", bold=False)
-            self.colorize("cyan", f"sudo systemctl daemon-reload && sudo systemctl enable --now {service_name}", bold=False)
+            self.colorize("cyan", f"sudo systemctl daemon-reload", bold=False)
+            self.colorize("cyan", f"sudo systemctl enable --now {service_name}", bold=False)
             return False
     
     def check_service_status(self):

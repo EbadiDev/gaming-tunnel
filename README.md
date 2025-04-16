@@ -28,7 +28,7 @@ sudo bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/ma
 ```
 
 This command will:
-1. Clone the repository to `/root/gaming-tunnel/`
+1. Clone the repository to `/root/gamingtunnel/src/`
 2. Create the installation directory at `/root/gamingtunnel/`
 3. Install the `uv` package manager if not already installed
 4. Set up a Python virtual environment
@@ -38,7 +38,7 @@ This command will:
 ## Directory Structure
 
 After installation, Gaming Tunnel uses the following directory structure:
-- `/root/gaming-tunnel/` - Repository code location
+- `/root/gamingtunnel/src/` - Repository code location
 - `/root/gamingtunnel/` - Main installation directory
 - `/root/gamingtunnel/tinyvpn` - The core TinyVPN binary
 - `/root/gamingtunnel/udp2raw` - The UDP2RAW binary for traffic encapsulation
@@ -96,6 +96,15 @@ The FEC feature uses a x:y format where:
 
 For example, with FEC 2:4, for every 4 original packets, 2 redundant packets are generated, allowing recovery from up to 2 packet losses in that group.
 
+#### Recommended FEC Settings
+
+- **For non-gaming usage** (video, downloading, web browsing): `-f20:10` with `timeout 0`
+  - Higher redundancy for better reliability with less time-sensitive data
+- **For gaming usage** (low latency): `-f0` (disabled) or `-f2:4` with `timeout 0` 
+  - Less or no redundancy for minimal latency with gaming traffic
+- **For a balance** (between bandwidth and latency): `-f2:4` with `timeout 0`
+  - Moderate redundancy for a compromise between reliability and latency
+
 ### UDP2RAW
 
 UDP2RAW encapsulates your game traffic (UDP) into another protocol to bypass network restrictions:
@@ -107,25 +116,65 @@ UDP2RAW encapsulates your game traffic (UDP) into another protocol to bypass net
 
 If you encounter issues:
 
-1. Check the service status:
+### Service Installation Failures
+
+If service installation fails with the message "Failed to enable and start service":
+
+1. First, check if the service file was properly copied:
 ```bash
-systemctl status tinyvpn-<config_name>-server.service
-# or for clients
-systemctl status tinyvpn-<config_name>-client.service
-# or for UDP2RAW
-systemctl status udp2raw-<config_name>-server.service
+ls -l /etc/systemd/system/tinyvpn-*
+ls -l /etc/systemd/system/udp2raw-*
 ```
 
-2. View logs:
+2. If the service file exists, try starting it manually:
 ```bash
-journalctl -u tinyvpn-<config_name>-server.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now tinyvpn-[config_name]-[server/client].service
 ```
 
-3. If the installation script fails, you can try running the steps manually:
+3. Check for errors in the service startup:
+```bash
+sudo systemctl status tinyvpn-[config_name]-[server/client].service
+journalctl -u tinyvpn-[config_name]-[server/client].service
+```
+
+4. Common issues include:
+   - Binary permission problems: Ensure binaries are executable (`chmod +x /root/gamingtunnel/tinyvpn`)
+   - Path issues: Make sure paths in service files match actual binary locations
+   - SELinux restrictions: Try `setenforce 0` temporarily to check if SELinux is blocking execution
+
+### Service Status Checking
+
+```bash
+# For TinyVPN services
+systemctl status tinyvpn-[config_name]-server.service
+systemctl status tinyvpn-[config_name]-client.service
+
+# For UDP2RAW services
+systemctl status udp2raw-[config_name]-server.service
+systemctl status udp2raw-[config_name]-client.service
+```
+
+### Log Viewing
+
+```bash
+# View service logs
+journalctl -u tinyvpn-[config_name]-server.service
+journalctl -u udp2raw-[config_name]-server.service
+
+# View direct output logs
+cat /var/log/tunnel[config_name].log
+cat /var/log/udp2raw_[config_name].log
+```
+
+### Manual Installation
+
+If the installation script fails, you can try running the steps manually:
 ```bash
 cd /root
-git clone https://github.com/EbadiDev/gaming-tunnel.git
-cd gaming-tunnel
+mkdir -p /root/gamingtunnel
+git clone https://github.com/EbadiDev/gaming-tunnel.git /root/gamingtunnel/src
+cd /root/gamingtunnel/src
 python main.py
 ```
 
