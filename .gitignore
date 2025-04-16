@@ -1,0 +1,64 @@
+ # Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+*.error.log
+logs/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.coverage
+.coverage.*
+htmlcov/
+
+# Gaming Tunnel specific
+gamingtunnel/tinyvpn
+gamingtunnel/udp2raw
+gamingtunnel/configs/
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Uv Package Manager
+.uv/
+
+# Testing
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+.coverage
+coverage.xml
+*.cover
+.coverage.*
