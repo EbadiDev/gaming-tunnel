@@ -23,7 +23,7 @@ A specialized VPN solution optimized for online gaming with low latency, packet 
 You can install and run GamingVPN with a single command:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/gamingtunnel.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/run.sh)
 ```
 
 This command will download and execute the script directly with root privileges.
