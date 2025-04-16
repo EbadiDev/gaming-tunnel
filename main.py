@@ -5,6 +5,7 @@ import requests
 import json
 import socket
 import subprocess
+import sys
 from typing import Optional, List, Dict
 from datetime import datetime
 
@@ -943,6 +944,8 @@ class GamingTunnel:
             self.show_menu()
         elif choice == "4":  # List Configurations
             self.list_configs()
+            # Don't immediately return to show_menu - list_configs will handle returning to the main menu
+            # when the user chooses to do so
             self.show_menu()
         elif choice == "5" and not self.frp_installed:  # Install FRP
             self.install_frp()
