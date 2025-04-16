@@ -280,6 +280,10 @@ class GamingTunnel:
                 network_stats = self.tinyvpn.get_network_stats(config_name)
                 download = network_stats["download_human"]
                 upload = network_stats["upload_human"]
+                
+                # If there's traffic, mark as connected regardless of ping result
+                if network_stats["download"] > 0 or network_stats["upload"] > 0:
+                    connection_status = "[green]Online[/green]"
                     
                 table.add_row(config_name, config_type, status, connection_status, download, upload)
             
@@ -318,12 +322,13 @@ class GamingTunnel:
             action_menu.add_row("2", "Delete a configuration")
             action_menu.add_row("3", "Refresh connection status")
             action_menu.add_row("4", "View detailed network statistics")
+            action_menu.add_row("5", "Run connection diagnostics")
             action_menu.add_row("0", "Return to main menu")
             
             self.console.print(Panel(action_menu, title="Configuration Actions", border_style="cyan"))
             
             # Get user choice
-            choice = Prompt.ask("Select an action", choices=["0", "1", "2", "3", "4"], default="0")
+            choice = Prompt.ask("Select an action", choices=["0", "1", "2", "3", "4", "5"], default="0")
             
             if choice == "0":
                 return
@@ -466,6 +471,72 @@ class GamingTunnel:
                     config_name = tinyvpn_configs[config_idx - 1]['name']
                     self.console.clear()
                     self.tinyvpn.show_network_usage(config_name)
+                else:
+                    self.colorize("red", "Invalid selection", bold=True)
+                
+                input("\nPress Enter to continue...")
+                
+            elif choice == "5":
+                # Run connection diagnostics
+                self.colorize("cyan", "Available configurations:", bold=True)
+                
+                # For diagnostics, we only include TinyVPN configs
+                for i, config in enumerate(tinyvpn_configs, 1):
+                    print(f"{i}. {config['name']} ({config['type']})")
+                
+                if not tinyvpn_configs:
+                    self.colorize("yellow", "No TinyVPN configurations available for diagnostics.", bold=True)
+                    input("\nPress Enter to continue...")
+                    continue
+                
+                config_idx = IntPrompt.ask("Select a configuration to run diagnostics", default=1)
+                if 1 <= config_idx <= len(tinyvpn_configs):
+                    config_name = tinyvpn_configs[config_idx - 1]['name']
+                    self.console.clear()
+                    
+                    # Run detailed diagnostics
+                    self.colorize("cyan", f"Running connection diagnostics for '{config_name}'...", bold=True)
+                    debug_info = self.tinyvpn.debug_connection_status(config_name)
+                    
+                    # Display diagnostics in a readable format
+                    print(f"\nConfiguration Type: {debug_info['config_type']}")
+                    print(f"Interface exists: {'✅' if debug_info['interface_exists'] else '❌'}")
+                    if debug_info['interface_exists']:
+                        print(f"Interface is UP: {'✅' if debug_info['interface_up'] else '❌'}")
+                        print(f"Has traffic: {'✅' if debug_info['has_traffic'] else '❌'}")
+                        print(f"Received bytes: {debug_info['rx_bytes']}")
+                        print(f"Transmitted bytes: {debug_info['tx_bytes']}")
+                    
+                    print(f"Subnet found: {'✅' if debug_info['subnet_found'] else '❌'}")
+                    if debug_info['subnet_found']:
+                        print(f"Remote IP to ping: {debug_info['ip_to_ping']}")
+                        print(f"Ping successful: {'✅' if debug_info['ping_successful'] else '❌'}")
+                        
+                        if 'ping_output' in debug_info:
+                            print("\nPing output:")
+                            print(debug_info['ping_output'])
+                    
+                    if debug_info['error']:
+                        self.colorize("red", f"\nError: {debug_info['error']}", bold=True)
+                    
+                    # Add manual detection instructions
+                    print("\nManual connection verification:")
+                    print(f"1. Try direct ping: ping {debug_info['ip_to_ping']}")
+                    print(f"2. Check interface: ip link show {config_name}")
+                    print(f"3. Check routing: ip route | grep {config_name}")
+                    print(f"4. Check service: sudo systemctl status tinyvpn-{config_name}-{debug_info['config_type']}.service")
+                    
+                    # Connection status determination
+                    if debug_info['interface_exists'] and debug_info['interface_up']:
+                        if debug_info['has_traffic'] or debug_info['ping_successful']:
+                            self.colorize("green", "\nDiagnosis: Connection appears to be WORKING properly", bold=True)
+                            if not debug_info['ping_successful']:
+                                self.colorize("yellow", "Note: Ping failed but traffic is flowing, which suggests the connection is still functional", bold=True)
+                        else:
+                            self.colorize("yellow", "\nDiagnosis: Interface is up but no traffic or ping response detected", bold=True)
+                            self.colorize("yellow", "The tunnel may be partially working. Try manually pinging or using the connection.", bold=True)
+                    else:
+                        self.colorize("red", "\nDiagnosis: Connection is DOWN or not established correctly", bold=True)
                 else:
                     self.colorize("red", "Invalid selection", bold=True)
                 

@@ -849,7 +849,16 @@ WantedBy=multi-user.target
             # Check if interface is UP
             if "state UP" not in ifconfig_result.stdout:
                 return False
-        except Exception:
+                
+            # If we're here, the interface exists and is UP
+            # Let's consider it connected if we can see traffic on it
+            network_stats = self.get_network_stats(config_name)
+            if network_stats["download"] > 0 or network_stats["upload"] > 0:
+                # There's traffic on the interface, so it's likely connected
+                return True
+        except Exception as e:
+            # Print exception for debugging
+            print(f"Error checking interface: {str(e)}")
             return False
         
         # Get subnet from config
@@ -866,14 +875,16 @@ WantedBy=multi-user.target
             ip_to_ping = f"{subnet.rsplit('.', 1)[0]}.1"
         
         try:
-            # Run ping with timeout to check connectivity
+            # Run ping without specifying interface (-I flag) which can cause issues
             result = subprocess.run(
-                ["ping", "-c", "1", "-W", "2", "-I", config_name, ip_to_ping],
+                ["ping", "-c", "1", "-W", "2", ip_to_ping],
                 capture_output=True,
                 text=True
             )
             return result.returncode == 0
-        except Exception:
+        except Exception as e:
+            # Print exception for debugging
+            print(f"Error pinging endpoint: {str(e)}")
             return False
     
     def get_network_stats(self, config_name: str) -> dict:
@@ -1005,3 +1016,65 @@ WantedBy=multi-user.target
                         print("Connection failed: No response to ping")
             except Exception as e:
                 self.colorize("red", f"Error getting interface details: {str(e)}", bold=False) 
+    
+    def debug_connection_status(self, config_name: str) -> dict:
+        """Get detailed debug information about connection status for diagnostics"""
+        debug_info = {
+            "interface_exists": False,
+            "interface_up": False,
+            "has_traffic": False,
+            "subnet_found": False,
+            "ping_successful": False,
+            "ip_to_ping": "N/A",
+            "config_type": "N/A",
+            "error": None
+        }
+        
+        config = self.load_config(config_name)
+        if not config:
+            debug_info["error"] = "Configuration not found"
+            return debug_info
+            
+        debug_info["config_type"] = config.get('CONFIG_TYPE', 'unknown')
+        
+        # Check if interface exists and is UP
+        try:
+            ifconfig_result = subprocess.run(
+                ["ip", "link", "show", config_name],
+                capture_output=True,
+                text=True
+            )
+            debug_info["interface_exists"] = ifconfig_result.returncode == 0
+            if debug_info["interface_exists"]:
+                debug_info["interface_up"] = "state UP" in ifconfig_result.stdout
+                
+                # Check if there's traffic
+                network_stats = self.get_network_stats(config_name)
+                debug_info["has_traffic"] = network_stats["download"] > 0 or network_stats["upload"] > 0
+                debug_info["rx_bytes"] = network_stats["download"]
+                debug_info["tx_bytes"] = network_stats["upload"]
+        except Exception as e:
+            debug_info["error"] = f"Interface check error: {str(e)}"
+        
+        # Get subnet information
+        subnet = config.get('SUBNET', '')
+        debug_info["subnet_found"] = bool(subnet)
+        if subnet:
+            if config.get('CONFIG_TYPE') == 'server':
+                debug_info["ip_to_ping"] = f"{subnet.rsplit('.', 1)[0]}.2"
+            else:
+                debug_info["ip_to_ping"] = f"{subnet.rsplit('.', 1)[0]}.1"
+                
+            # Try pinging without interface specification
+            try:
+                result = subprocess.run(
+                    ["ping", "-c", "1", "-W", "2", debug_info["ip_to_ping"]],
+                    capture_output=True,
+                    text=True
+                )
+                debug_info["ping_successful"] = result.returncode == 0
+                debug_info["ping_output"] = result.stdout
+            except Exception as e:
+                debug_info["error"] = f"Ping error: {str(e)}"
+        
+        return debug_info 
