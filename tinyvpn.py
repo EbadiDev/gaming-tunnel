@@ -3,6 +3,8 @@ import subprocess
 import socket
 import re
 import shutil
+import random
+import string
 from typing import Dict, Optional, List, Tuple
 
 from rich.console import Console
@@ -27,6 +29,11 @@ class TinyVPN:
         if bold:
             style = f"{color} bold"
         rich_print(f"[{style}]{text}[/{style}]")
+    
+    def generate_random_password(self, length=12):
+        """Generate a random password for VPN authentication"""
+        chars = string.ascii_letters + string.digits + "!@#$%^&*"
+        return ''.join(random.choice(chars) for _ in range(length))
     
     def is_port_open(self, port: int) -> bool:
         """Check if a port is available"""
@@ -121,7 +128,7 @@ class TinyVPN:
         
         # Get FEC value
         while True:
-            fec_input = Prompt.ask("Enter FEC value (x:y format, 0 to disable)", default="2:4")
+            fec_input = Prompt.ask("Enter FEC value (x:y format, 0 to disable)", default="10:6")
             if fec_input == "0":
                 fec = "--disable-fec"
                 break
@@ -134,27 +141,41 @@ class TinyVPN:
         # Get subnet
         subnet = Prompt.ask("Enter subnet address", default="10.22.23.0")
         
-        # Get mode
-        mode_choice = Prompt.ask(
-            "Select mode", 
-            choices=["0", "1"], 
-            default="1"
-        )
+        # Get mode (optional)
+        use_mode = Confirm.ask("Do you want to specify a mode? (Default: No mode)", default=False)
         
-        if mode_choice == "0":
-            mode = "--mode 0 --timeout 4"
-            self.colorize("yellow", "Selected non-gaming mode with timeout 4", bold=False)
+        if use_mode:
+            mode_choice = Prompt.ask(
+                "Select mode", 
+                choices=["0", "1"], 
+                default="1"
+            )
+            
+            if mode_choice == "0":
+                mode = "--mode 0 --timeout 4"
+                self.colorize("yellow", "Selected non-gaming mode with timeout 4", bold=False)
+            else:
+                mode = "--mode 1 --timeout 0"
+                self.colorize("green", "Selected gaming mode with timeout 0", bold=False)
         else:
-            mode = "--mode 1 --timeout 0"
-            self.colorize("green", "Selected gaming mode with timeout 0", bold=False)
+            mode = "--timeout 4"
+            self.colorize("yellow", "No mode specified, using default timeout 4", bold=False)
         
         # Get MTU
         mtu = IntPrompt.ask("Enter MTU value", default=1450)
         
+        # Generate or ask for password
+        use_random_password = Confirm.ask("Generate a random password?", default=True)
+        if use_random_password:
+            password = self.generate_random_password()
+            self.colorize("green", f"Generated password: {password}", bold=True)
+        else:
+            password = Prompt.ask("Enter password for VPN authentication")
+        
         # Prepare the configuration
         server_cmd = (
             f"-s \"-l[::]:{port}\" {fec} --sub-net {subnet} --mtu {mtu} "
-            f"{mode} --tun-dev {config_name} --disable-obscure"
+            f"{mode} --tun-dev {config_name} --disable-obscure -k \"{password}\""
         )
         
         # Save configuration
@@ -165,6 +186,7 @@ class TinyVPN:
             f.write(f"SUBNET={subnet}\n")
             f.write(f"MODE={mode}\n")
             f.write(f"MTU=--mtu {mtu}\n")
+            f.write(f"PASSWORD={password}\n")
             f.write(f"COMMAND={server_cmd}\n")
             f.write(f"CONFIG_TYPE=server\n")
         
@@ -208,6 +230,7 @@ WantedBy=multi-user.target
             f.write(f"Client VPN IP: {subnet.rsplit('.', 1)[0]}.2\n")
             f.write(f"FEC: {fec}\n")
             f.write(f"MTU: {mtu}\n")
+            f.write(f"Password: {password}\n")
             
         self.colorize("green", f"TinyVPN server configuration '{config_name}' created successfully!", bold=True)
         
@@ -720,7 +743,7 @@ WantedBy=multi-user.target
         
         # Get FEC value
         while True:
-            fec_input = Prompt.ask("Enter FEC value (x:y format, 0 to disable)", default="2:4")
+            fec_input = Prompt.ask("Enter FEC value (x:y format, 0 to disable)", default="10:6")
             if fec_input == "0":
                 fec = "0"
                 break
@@ -733,25 +756,44 @@ WantedBy=multi-user.target
         # Get subnet
         subnet = Prompt.ask("Enter subnet address", default="10.22.23.0")
         
-        # Get mode - timeout is automatically determined by mode
-        mode_choice = Prompt.ask(
-            "Select mode (0=non-gaming, 1=gaming)", 
-            choices=["0", "1"], 
-            default="1"
-        )
+        # Get mode - optional
+        use_mode = Confirm.ask("Do you want to specify a mode? (Default: No mode)", default=False)
         
-        if mode_choice == "0":
-            self.colorize("yellow", "Selected non-gaming mode with timeout 4", bold=False)
+        if use_mode:
+            mode_choice = Prompt.ask(
+                "Select mode (0=non-gaming, 1=gaming)", 
+                choices=["0", "1"], 
+                default="1"
+            )
+            
+            if mode_choice == "0":
+                self.colorize("yellow", "Selected non-gaming mode with timeout 4", bold=False)
+                mode = "0"
+                timeout = 4
+            else:
+                self.colorize("green", "Selected gaming mode with timeout 0", bold=False)
+                mode = "1"
+                timeout = 0
         else:
-            self.colorize("green", "Selected gaming mode with timeout 0", bold=False)
+            mode = None  # No mode specified
+            timeout = 4  # Default timeout
+            self.colorize("yellow", "No mode specified, using default timeout 4", bold=False)
         
         # Get MTU
         mtu = IntPrompt.ask("Enter MTU value", default=1450)
         
+        # Generate or ask for password
+        use_random_password = Confirm.ask("Generate a random password?", default=True)
+        if use_random_password:
+            password = self.generate_random_password()
+            self.colorize("green", f"Generated password: {password}", bold=True)
+        else:
+            password = Prompt.ask("Enter password for VPN authentication (must match server)")
+        
         # Create client configuration - timeout is determined by mode
-        self.create_client_config(config_name, server_addr, server_port, fec, subnet, mode_choice, mtu)
+        self.create_client_config(config_name, server_addr, server_port, fec, subnet, mode, mtu, timeout, password)
     
-    def create_client_config(self, config_name, server_addr, server_port, fec, subnet, mode, mtu, timeout=None):
+    def create_client_config(self, config_name, server_addr, server_port, fec, subnet, mode, mtu, timeout=4, password=None):
         """Create a new client configuration"""
         # Create config directory
         config_dir = os.path.join(self.configs_dir, config_name)
@@ -766,15 +808,20 @@ WantedBy=multi-user.target
         
         # Format mode parameter with appropriate timeout
         if mode == "0":
-            mode_param = "0 --timeout 4"
+            mode_param = "--mode 0 --timeout 4"
             timeout_value = 4
-        else:
-            mode_param = "1 --timeout 0"
+        elif mode == "1":
+            mode_param = "--mode 1 --timeout 0"
             timeout_value = 0
-        
-        # Use provided timeout only if explicitly set, otherwise use the mode-determined value
-        if timeout is not None:
+        else:
+            # No mode specified, use default timeout
+            mode_param = f"--timeout {timeout}"
             timeout_value = timeout
+        
+        # Generate password if none provided
+        if password is None:
+            password = self.generate_random_password()
+            self.colorize("green", f"Generated password: {password}", bold=True)
         
         # Create client config file
         config_file = os.path.join(config_dir, f"client_config_{config_name}.conf")
@@ -783,9 +830,10 @@ WantedBy=multi-user.target
             f.write(f"SERVER_PORT={server_port}\n")
             f.write(f"FEC={fec_param}\n")
             f.write(f"SUBNET={subnet}\n")
-            f.write(f"MODE=--mode {mode_param}\n")
+            f.write(f"MODE={mode_param}\n")
             f.write(f"MTU={mtu}\n")
             f.write(f"TIMEOUT={timeout_value}\n")
+            f.write(f"PASSWORD={password}\n")
             f.write(f"CONFIG_NAME={config_name}\n")
             f.write(f"CONFIG_TYPE=client\n")
         
@@ -799,7 +847,7 @@ WantedBy=multi-user.target
             f.write("[Service]\n")
             f.write("Type=simple\n")
             f.write(f"WorkingDirectory={self.base_dir}\n")
-            f.write(f"ExecStart={self.binary_path} -c -r{server_addr}:{server_port} {fec_param} --sub-net {subnet} --mode {mode_param} --mtu {mtu} --tun-dev {config_name} --keep-reconnect --disable-obscure\n")
+            f.write(f"ExecStart={self.binary_path} -c -r{server_addr}:{server_port} {fec_param} --sub-net {subnet} {mode_param} --mtu {mtu} --tun-dev {config_name} -k \"{password}\" --keep-reconnect --disable-obscure\n")
             f.write("Restart=always\n")
             f.write("RestartSec=3\n\n")
             
