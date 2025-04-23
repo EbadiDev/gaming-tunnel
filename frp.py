@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 import requests
 import shutil
+import platform
 from typing import Optional, List, Dict
 from rich import print as rich_print
 from rich.console import Console
