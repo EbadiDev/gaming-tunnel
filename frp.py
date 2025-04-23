@@ -58,20 +58,41 @@ class FRP:
     def get_latest_version(self) -> str:
         """Get the latest FRP version from GitHub releases"""
         try:
-            response = requests.get(self.version_url, allow_redirects=True)
-            # Extract version from URL redirect (e.g., .../tag/v0.62.0)
-            version = response.url.split('/')[-1]
-            if version.startswith('v'):
-                version = version[1:]  # Remove 'v' prefix
-            return version
+            self.colorize("cyan", "Fetching latest version from GitHub...", bold=True)
+            
+            # Use a user agent to avoid GitHub API rate limiting
+            headers = {
+                "User-Agent": "GamingTunnel-FRP-Installer"
+            }
+            
+            response = requests.get(self.version_url, headers=headers)
+            
+            if response.status_code != 200:
+                self.colorize("yellow", f"GitHub API returned status code {response.status_code}", bold=True)
+                self.colorize("yellow", "Using fallback version 0.62.0", bold=True)
+                return "0.62.0"
+                
+            data = response.json()
+            
+            # Extract version from tag_name field
+            if 'tag_name' in data:
+                version = data['tag_name']
+                if version.startswith('v'):
+                    version = version[1:]  # Remove 'v' prefix
+                self.colorize("green", f"Found latest version: {version}", bold=True)
+                return version
+            else:
+                self.colorize("yellow", "Could not find version in GitHub API response, using fallback", bold=True)
+                return "0.62.0"
+                
         except Exception as e:
             self.colorize("red", f"Failed to get latest version: {str(e)}", bold=True)
-            # Fallback to a hardcoded recent version
+            self.colorize("yellow", "Using fallback version 0.62.0", bold=True)
             return "0.62.0"
     
     def get_download_url(self, version: str, arch: str) -> str:
         """Generate the download URL for a specific version and architecture"""
-        if arch == "x86_64":
+        if arch == "x86_64" or arch == "amd64":
             arch_suffix = "linux_amd64"
         elif arch in ["armv7l", "armv7"]:
             arch_suffix = "linux_arm"
@@ -81,7 +102,8 @@ class FRP:
             self.colorize("red", f"Unsupported architecture: {arch}", bold=True)
             return None
         
-        return f"{self.github_download_url}/v{version}/frp_{version}_{arch_suffix}.tar.gz"
+        url = f"{self.github_download_url}/v{version}/frp_{version}_{arch_suffix}.tar.gz"
+        return url
     
     def install(self, version: str = None, arch: str = None) -> bool:
         """Install FRP binaries"""
@@ -90,18 +112,22 @@ class FRP:
             
             if version is None:
                 version = self.get_latest_version()
-                self.colorize("cyan", f"Using latest version: {version}", bold=True)
+                self.colorize("cyan", f"Using version: {version}", bold=True)
                 
             if arch is None:
-                arch = platform.machine()
-                self.colorize("cyan", f"Detected architecture: {arch}", bold=True)
+                # Detect system architecture
+                detected_arch = platform.machine()
+                self.colorize("cyan", f"Detected architecture: {detected_arch}", bold=True)
                 
-                if arch == "x86_64":
-                    arch = "amd64"
-                elif arch in ["armv7l", "aarch64"]:
-                    arch = "arm64"  # Most common ARM architecture
+                # Map architecture names for consistency
+                if detected_arch == "x86_64":
+                    arch = "x86_64"  # Keep as x86_64 for get_download_url
+                elif detected_arch in ["armv7l", "armv7"]:
+                    arch = "armv7"
+                elif detected_arch in ["aarch64", "arm64"]:
+                    arch = "arm64"
                 else:
-                    self.colorize("red", f"Unsupported architecture: {arch}", bold=True)
+                    self.colorize("red", f"Unsupported architecture: {detected_arch}", bold=True)
                     input("\nPress Enter to continue...")
                     return False
                 
