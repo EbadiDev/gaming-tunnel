@@ -330,12 +330,10 @@ class FRP:
         # Bind address
         bind_addr = Prompt.ask("Bind address", default="0.0.0.0")
         
-        # Transport protocol
-        transport_protocol = Prompt.ask(
-            "Transport protocol",
-            choices=["tcp", "kcp", "quic", "wss"],
-            default="tcp"
-        )
+        # Ask which protocols to support
+        support_tcp = Confirm.ask("Enable TCP protocol?", default=True)
+        support_kcp = Confirm.ask("Enable KCP protocol?", default=False)
+        support_quic = Confirm.ask("Enable QUIC protocol?", default=False)
         
         # Bind port
         while True:
@@ -364,31 +362,39 @@ class FRP:
             with open(config_path, 'w') as f:
                 f.write(f"# FRP Server Configuration for {config_name}\n\n")
                 f.write(f"bindAddr = \"{bind_addr}\"\n")
-                f.write(f"bindPort = {bind_port}\n")
                 
+                # Only add bindPort if TCP is enabled
+                if support_tcp:
+                    f.write(f"bindPort = {bind_port}\n")
+                    
                 # Add protocol-specific port bindings
-                if transport_protocol == "kcp":
+                if support_kcp:
                     f.write(f"# Specify a UDP port for KCP.\n")
-                    f.write(f"kcpBindPort = {bind_port}\n\n")
-                elif transport_protocol == "quic":
-                    f.write(f"# Specify a UDP port for QUIC.\n")
-                    f.write(f"quicBindPort = {bind_port}\n\n")
-                else:
-                    f.write("\n")
+                    f.write(f"kcpBindPort = {bind_port}\n")
                 
+                if support_quic:
+                    f.write(f"# Specify a UDP port for QUIC.\n")
+                    f.write(f"quicBindPort = {bind_port}\n")
+                    
+                f.write("\n")
                 f.write("transport.maxPoolCount = 5\n")
                 f.write("transport.tcpMux = true\n")
                 f.write("transport.tcpMuxKeepaliveInterval = 30\n")
                 f.write("transport.tcpKeepalive = 7200\n\n")
                 
-                # Add transport protocol specification
-                if transport_protocol != "tcp":  # tcp is default, so no need to specify
-                    f.write(f"transport.protocol = \"{transport_protocol}\"\n\n")
+                # Do NOT add transport.protocol for server config - that's client-only
                 
                 f.write("auth.method = \"token\"\n")
                 f.write(f"auth.token = \"{auth_token}\"\n")
                 
             self.colorize("green", f"Server configuration '{config_name}' created successfully", bold=True)
+            self.colorize("cyan", "Note: FRP server supports multiple protocols simultaneously", bold=True)
+            if support_tcp:
+                self.colorize("cyan", f"- TCP on port {bind_port}", bold=False)
+            if support_kcp:
+                self.colorize("cyan", f"- KCP on port {bind_port}", bold=False)
+            if support_quic:
+                self.colorize("cyan", f"- QUIC on port {bind_port}", bold=False)
             
             # Create a service file in our user-accessible directory first
             service_dir = os.path.join(self.base_dir, "services")
