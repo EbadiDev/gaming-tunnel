@@ -330,6 +330,13 @@ class FRP:
         # Bind address
         bind_addr = Prompt.ask("Bind address", default="0.0.0.0")
         
+        # Transport protocol
+        transport_protocol = Prompt.ask(
+            "Transport protocol",
+            choices=["tcp", "kcp", "quic", "wss"],
+            default="tcp"
+        )
+        
         # Bind port
         while True:
             try:
@@ -358,12 +365,25 @@ class FRP:
                 f.write(f"# FRP Server Configuration for {config_name}\n\n")
                 f.write(f"bindAddr = \"{bind_addr}\"\n")
                 f.write(f"bindPort = {bind_port}\n")
-                f.write(f"kcpBindPort = {bind_port}\n\n")
+                
+                # Add protocol-specific port bindings
+                if transport_protocol == "kcp":
+                    f.write(f"# Specify a UDP port for KCP.\n")
+                    f.write(f"kcpBindPort = {bind_port}\n\n")
+                elif transport_protocol == "quic":
+                    f.write(f"# Specify a UDP port for QUIC.\n")
+                    f.write(f"quicBindPort = {bind_port}\n\n")
+                else:
+                    f.write("\n")
                 
                 f.write("transport.maxPoolCount = 5\n")
                 f.write("transport.tcpMux = true\n")
                 f.write("transport.tcpMuxKeepaliveInterval = 30\n")
                 f.write("transport.tcpKeepalive = 7200\n\n")
+                
+                # Add transport protocol specification
+                if transport_protocol != "tcp":  # tcp is default, so no need to specify
+                    f.write(f"transport.protocol = \"{transport_protocol}\"\n\n")
                 
                 f.write("auth.method = \"token\"\n")
                 f.write(f"auth.token = \"{auth_token}\"\n")
@@ -459,9 +479,9 @@ class FRP:
         
         # Transport protocol
         transport_protocol = Prompt.ask(
-            "Transport protocol",
-            choices=["quic", "kcp", "tcp", "wss"],
-            default="quic"
+            "Transport protocol (must match server configuration)",
+            choices=["tcp", "kcp", "quic", "wss"],
+            default="tcp"
         )
         
         # Prompt for proxy configuration
@@ -501,7 +521,10 @@ class FRP:
                 f.write("auth.method = \"token\"\n")
                 f.write(f"auth.token = \"{auth_token}\"\n\n")
                 
-                f.write(f"transport.protocol = \"{transport_protocol}\"\n")
+                # Only add transport protocol if not tcp (which is default)
+                if transport_protocol != "tcp":
+                    f.write(f"transport.protocol = \"{transport_protocol}\"\n")
+                
                 f.write("transport.tcpMux = true\n")
                 f.write("transport.tcpMuxKeepaliveInterval = 30\n\n")
                 
