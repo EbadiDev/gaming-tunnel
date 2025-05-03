@@ -751,8 +751,19 @@ WantedBy=multi-user.target
             else:
                 self.colorize("red", "Invalid FEC format. Use x:y format or 0 to disable.", bold=True)
         
-        # Get subnet
-        subnet = Prompt.ask("Enter subnet address", default="10.22.23.0")
+        # Check if there's a subnet in existing configurations
+        configs = self.get_available_configs()
+        existing_subnet = None
+        for config in configs:
+            if config['type'] == 'server':  # Try to get subnet from server config first
+                cfg_data = self.load_config(config['name'])
+                if 'SUBNET' in cfg_data:
+                    existing_subnet = cfg_data['SUBNET']
+                    break
+        
+        # Get subnet - use existing subnet if found
+        subnet_default = existing_subnet if existing_subnet else "10.22.23.0"
+        subnet = Prompt.ask("Enter subnet address", default=subnet_default)
         
         # Get mode - optional
         use_mode = Confirm.ask("Do you want to specify a mode? (Default: No mode)", default=False)
@@ -780,13 +791,8 @@ WantedBy=multi-user.target
         # Get MTU
         mtu = IntPrompt.ask("Enter MTU value", default=1450)
         
-        # Generate or ask for password
-        use_random_password = Confirm.ask("Generate a random password?", default=True)
-        if use_random_password:
-            password = self.generate_random_password()
-            self.colorize("green", f"Generated password: {password}", bold=True)
-        else:
-            password = Prompt.ask("Enter password for VPN authentication (must match server)")
+        # Always ask for password (no random generation option)
+        password = Prompt.ask("Enter password for VPN authentication (must match server)")
         
         # Create client configuration - timeout is determined by mode
         self.create_client_config(config_name, server_addr, server_port, fec, subnet, mode, mtu, timeout, password)
@@ -816,7 +822,7 @@ WantedBy=multi-user.target
             mode_param = f"--timeout {timeout}"
             timeout_value = timeout
         
-        # Generate password if none provided
+        # Generate password if none provided (for programmatic calls)
         if password is None:
             password = self.generate_random_password()
             self.colorize("green", f"Generated password: {password}", bold=True)
@@ -835,6 +841,13 @@ WantedBy=multi-user.target
             f.write(f"CONFIG_NAME={config_name}\n")
             f.write(f"CONFIG_TYPE=client\n")
         
+        # Format IPv6 addresses with brackets for the command
+        # Check if the address is IPv6 (contains colons but not just at the end for port)
+        formatted_server_addr = server_addr
+        if ':' in server_addr and not server_addr.startswith('['):
+            # This looks like an IPv6 address that's not already bracketed
+            formatted_server_addr = f"[{server_addr}]"
+        
         # Create systemd service file
         service_file = os.path.join(config_dir, f"tinyvpn-{config_name}-client.service")
         with open(service_file, 'w') as f:
@@ -845,7 +858,7 @@ WantedBy=multi-user.target
             f.write("[Service]\n")
             f.write("Type=simple\n")
             f.write(f"WorkingDirectory={self.base_dir}\n")
-            f.write(f"ExecStart={self.binary_path} -c -r{server_addr}:{server_port} {fec_param} --sub-net {subnet} {mode_param} --mtu {mtu} --tun-dev {config_name} -k \"{password}\" --keep-reconnect --disable-obscure\n")
+            f.write(f"ExecStart={self.binary_path} -c -r{formatted_server_addr}:{server_port} {fec_param} --sub-net {subnet} {mode_param} --mtu {mtu} --tun-dev {config_name} -k \"{password}\" --keep-reconnect --disable-obscure\n")
             f.write("Restart=always\n")
             f.write("RestartSec=3\n\n")
             
