@@ -26,7 +26,7 @@ A specialized VPN solution optimized for online gaming with low latency, packet 
 You can install and run Gaming Tunnel with a single command:
 
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/run.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/ebadidev/gaming-tunnel/main/run.sh)
 ```
 
 This command will:
