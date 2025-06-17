@@ -21,6 +21,15 @@ from rich import print as rich_print
 from tinyvpn import TinyVPN
 from udp2raw import UDP2Raw
 from frp import FRP
+import importlib.util
+import sys
+
+# Import 6to4 module using importlib since module names can't start with numbers
+spec = importlib.util.spec_from_file_location("sixto4_module", "6to4.py")
+sixto4_module = importlib.util.module_from_spec(spec)
+sys.modules["sixto4_module"] = sixto4_module
+spec.loader.exec_module(sixto4_module)
+SixToFour = sixto4_module.SixToFour
 
 
 class GamingTunnel:
@@ -28,21 +37,22 @@ class GamingTunnel:
         self.tinyvpn = TinyVPN()
         self.udp2raw = UDP2Raw()
         self.frp = FRP()
+        self.sixto4 = SixToFour()
         self.console = Console()
-        
+
         # Use a more accessible base directory
         self.home_dir = os.path.expanduser("~")
         self.dest_dir = os.path.join(self.home_dir, ".gamingtunnel")
         self.config_dir = os.path.join(self.dest_dir, "configs")
-        
+
         # Ensure directories exist
         os.makedirs(self.dest_dir, exist_ok=True)
         os.makedirs(self.config_dir, exist_ok=True)
-        
+
         # Update paths
         self.tinyvpn_file = os.path.join(self.dest_dir, "tinyvpn")
         self.udp2raw_file = os.path.join(self.dest_dir, "udp2raw")
-        
+
         self.url_x86 = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_amd64"
         self.url_arm = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/tinyvpn_arm"
         self.url_udp2raw = "https://github.com/ebadidev/gaming-tunnel/raw/main/core/udp2raw_amd64"
@@ -51,13 +61,13 @@ class GamingTunnel:
         self.udp2raw_installed = self.check_udp2raw_installed()
         self.frp_installed = self.frp.is_installed()
         self.cores_installed = self.tinyvpn_installed and self.udp2raw_installed
-        
+
         # Server info cache
         self.server_info_cache = None
         self.server_info_cache_time = 0
         self.server_info_cache_ttl = 3600  # Extend cache TTL to 1 hour
         self.skip_server_info = False  # New flag to optionally skip server info display
-        
+
         # Local storage for server info
         # First try to create the directory to ensure we can write to it
         try:
@@ -74,14 +84,14 @@ class GamingTunnel:
             home_dir = os.path.expanduser("~")
             self.server_info_file = os.path.join(home_dir, "server_info.json")
             print(f"Error creating directory, using fallback location: {self.server_info_file}")
-        
+
         # Try to load cached server info from file if it exists
         self.load_server_info_from_file()
 
     def check_tinyvpn_installed(self):
         """Check if TinyVPN core is installed"""
         return os.path.isfile(self.tinyvpn_file)
-        
+
     def check_udp2raw_installed(self):
         """Check if UDP2RAW core is installed"""
         return os.path.isfile(self.udp2raw_file)
@@ -102,46 +112,46 @@ class GamingTunnel:
         try:
             # Ensure the dest_dir exists first
             os.makedirs(self.dest_dir, exist_ok=True)
-            
+
             # Create server_info file path in an existing directory
             # Instead of using os.path.join with self.dest_dir, use a directory we know exists
             # First try the user's home directory as fallback
             home_dir = os.path.expanduser("~")
             fallback_path = os.path.join(home_dir, "server_info.json")
-            
+
             # Try to save to the main directory first
             try:
                 # Create directory if it doesn't exist
                 os.makedirs(os.path.dirname(self.server_info_file), exist_ok=True)
-                
+
                 # Add timestamp to the data
                 info['timestamp'] = time.time()
-                
+
                 # Write to file with debug message
                 print(f"Saving server info to {self.server_info_file}")
                 with open(self.server_info_file, 'w') as f:
                     json.dump(info, f)
-                    
+
                 print(f"Server info saved successfully to {self.server_info_file}")
                 return True
             except Exception as main_error:
                 # If fails, try saving to the fallback location
                 print(f"Failed to save server info to {self.server_info_file}: {str(main_error)}")
                 print(f"Trying fallback location: {fallback_path}")
-                
+
                 with open(fallback_path, 'w') as f:
                     json.dump(info, f)
-                
+
                 # Update the server_info_file path to point to the successful location
                 self.server_info_file = fallback_path
                 print(f"Server info saved to fallback location: {fallback_path}")
                 return True
-                
+
         except Exception as e:
             # Don't silently fail, print the error
             print(f"Error saving server info: {str(e)}")
             return False
-    
+
     def load_server_info_from_file(self):
         """Load server information from the local file if it exists and is not too old"""
         try:
@@ -149,7 +159,7 @@ class GamingTunnel:
                 print(f"Found server info file at {self.server_info_file}")
                 with open(self.server_info_file, 'r') as f:
                     data = json.load(f)
-                    
+
                 # Check if data is still fresh (within TTL)
                 current_time = time.time()
                 if 'timestamp' in data and (current_time - data['timestamp']) < self.server_info_cache_ttl:
@@ -163,12 +173,12 @@ class GamingTunnel:
                 # Also check fallback location
                 home_dir = os.path.expanduser("~")
                 fallback_path = os.path.join(home_dir, "server_info.json")
-                
+
                 if os.path.exists(fallback_path):
                     print(f"Found server info at fallback location: {fallback_path}")
                     with open(fallback_path, 'r') as f:
                         data = json.load(f)
-                    
+
                     # Check if data is still fresh
                     current_time = time.time()
                     if 'timestamp' in data and (current_time - data['timestamp']) < self.server_info_cache_ttl:
@@ -180,7 +190,7 @@ class GamingTunnel:
                         return True
                 else:
                     print(f"No server info file found at {self.server_info_file} or {fallback_path}")
-            
+
             return False
         except Exception as e:
             # Don't silently fail, print the error
@@ -190,7 +200,7 @@ class GamingTunnel:
     def install_dependencies(self):
         """Install TinyVPN and UDP2RAW binaries based on system architecture"""
         print()  # Empty line
-        
+
         # Check if files already exist
         if self.check_cores_installed():
             self.colorize("green", "All cores installed already.", bold=True)
@@ -198,11 +208,11 @@ class GamingTunnel:
             self.udp2raw_installed = True
             self.cores_installed = True
             return False
-        
+
         # Create directory if it doesn't exist
         if not os.path.isdir(self.dest_dir):
             os.makedirs(self.dest_dir, exist_ok=True)
-        
+
         # Detect system architecture
         arch = platform.machine()
         if arch == "x86_64":
@@ -215,10 +225,10 @@ class GamingTunnel:
             self.colorize("red", f"Unsupported architecture: {arch}", bold=True)
             time.sleep(2)
             return False
-        
+
         tinyvpn_success = False
         udp2raw_success = False
-        
+
         # Use Rich's Progress for installation feedback
         with Progress(
             SpinnerColumn(),
@@ -239,7 +249,7 @@ class GamingTunnel:
                 progress.update(tinyvpn_task, description="TinyVPN Core installation failed")
                 tinyvpn_success = False
                 self.tinyvpn_installed = False
-            
+
             # Download and install UDP2RAW
             udp2raw_task = progress.add_task(description="Installing UDP2RAW...", total=None)
             try:
@@ -254,13 +264,13 @@ class GamingTunnel:
                 progress.update(udp2raw_task, description="UDP2RAW installation failed")
                 udp2raw_success = False
                 self.udp2raw_installed = False
-            
+
             # Update overall installation status
             self.cores_installed = self.tinyvpn_installed and self.udp2raw_installed
-            
+
             # Give the user time to see the final status
             time.sleep(1)
-        
+
         # Check installation results and report
         if tinyvpn_success and udp2raw_success:
             self.colorize("green", "TinyVPN core and UDP2RAW installed successfully...", bold=True)
@@ -281,21 +291,21 @@ class GamingTunnel:
         current_time = time.time()
         if not force_refresh and self.server_info_cache and (current_time - self.server_info_cache_time) < self.server_info_cache_ttl:
             return self.server_info_cache
-        
+
         info = {}
-        
+
         # Get IPv4 address with a shorter timeout
         try:
             info["ipv4"] = requests.get("https://api.ipify.org", timeout=2).text
         except Exception:
             info["ipv4"] = "Unknown"
-        
+
         # Get IPv6 address if available with a shorter timeout
         try:
             info["ipv6"] = requests.get("https://api6.ipify.org", timeout=2).text
         except Exception:
             info["ipv6"] = None
-        
+
         # Get location and datacenter information with a shorter timeout
         try:
             response = requests.get(f"http://ipwhois.app/json/{info['ipv4']}", timeout=2)
@@ -309,14 +319,14 @@ class GamingTunnel:
             info["isp"] = "Unknown"
             info["region"] = "Unknown"
             info["city"] = "Unknown"
-        
+
         # Update cache
         self.server_info_cache = info
         self.server_info_cache_time = current_time
-        
+
         # Save to file for future use
         self.save_server_info_to_file(info)
-        
+
         return info
 
     def display_status(self, force_refresh=False):
@@ -324,24 +334,24 @@ class GamingTunnel:
         # If skip_server_info is True and we're not forcing a refresh, return early
         if self.skip_server_info and not force_refresh:
             return
-        
+
         info = self.get_server_info(force_refresh)
-        
+
         table = Table(show_header=False, box=None)
         table.add_column("Property", style="green")
         table.add_column("Value", style="yellow")
-        
+
         table.add_row("IPv4", info["ipv4"])
         if info["ipv6"]:
             table.add_row("IPv6", info["ipv6"])
         table.add_row("Location", f"{info['city']}, {info['region']}, {info['country']}")
         table.add_row("Datacenter", info["isp"])
-        
+
         # Add a last updated timestamp
         if 'timestamp' in info:
             last_updated = datetime.fromtimestamp(info['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             table.add_row("Last Updated", last_updated)
-        
+
         self.console.print(Panel(table, title="Server Information", border_style="cyan"))
 
     def create_config(self):
@@ -349,27 +359,28 @@ class GamingTunnel:
         if not self.cores_installed and not self.frp_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             return
-        
+
         self.console.clear()
-        
+
         # Config menu
         menu = Table(show_header=True, box=None)
         menu.add_column("Option", style="cyan", justify="center")
         menu.add_column("Description", style="green")
-        
+
         menu.add_row("1", "Configure TinyVPN Server")
         menu.add_row("2", "Configure TinyVPN Client")
         menu.add_row("3", "Configure UDP2RAW Server")
         menu.add_row("4", "Configure UDP2RAW Client")
         menu.add_row("5", "Configure FRP Server")
         menu.add_row("6", "Configure FRP Client")
-        menu.add_row("7", "List and Manage Existing Configurations")
+        menu.add_row("7", "Configure 6to4 Tunnel")
+        menu.add_row("8", "List and Manage Existing Configurations")
         menu.add_row("0", "Return to main menu")
-        
+
         self.console.print(Panel(menu, title="Configuration Management", border_style="cyan"))
-        
-        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7"], default="0")
-        
+
+        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8"], default="0")
+
         if choice == "1":
             self.tinyvpn.configure_server()
         elif choice == "2":
@@ -383,6 +394,8 @@ class GamingTunnel:
         elif choice == "6":
             self.frp.configure_client()
         elif choice == "7":
+            self.sixto4.show_menu()
+        elif choice == "8":
             self.list_configs()  # Add the list_configs function as an option
         elif choice == "0":
             return
@@ -395,7 +408,7 @@ class GamingTunnel:
             return
 
         self.console.clear()
-        
+
         # Try to ensure config directories exist and check permissions
         try:
             os.makedirs(self.tinyvpn.configs_dir, exist_ok=True)
@@ -405,24 +418,24 @@ class GamingTunnel:
         except PermissionError:
             self.colorize("red", "Error: Cannot create configuration directories due to permission issues.", bold=True)
             self.colorize("yellow", "Try running the application with sudo or as root.", bold=True)
-            
+
             # Print configuration path information
             print("\nConfiguration paths:")
             print(f"TinyVPN: {self.tinyvpn.configs_dir}")
             print(f"UDP2RAW: {self.udp2raw.configs_dir}")
             if self.frp_installed:
                 print(f"FRP: {self.frp.configs_dir}")
-            
+
             input("\nPress Enter to return to main menu...")
             return
-        
+
         # Get TinyVPN configurations
         try:
             tinyvpn_configs = self.tinyvpn.get_available_configs()
         except Exception as e:
             self.colorize("red", f"Error reading TinyVPN configurations: {str(e)}", bold=True)
             tinyvpn_configs = []
-        
+
         # Get UDP2Raw configurations
         try:
             udp2raw_configs = self.udp2raw.get_available_configs()
@@ -437,24 +450,32 @@ class GamingTunnel:
                 frp_configs = self.frp.get_available_configs()
             except Exception as e:
                 self.colorize("red", f"Error reading FRP configurations: {str(e)}", bold=True)
-        
-        if not tinyvpn_configs and not udp2raw_configs and not frp_configs:
+
+        # Get 6to4 configurations
+        try:
+            sixto4_configs = self.sixto4.get_available_configs()
+        except Exception as e:
+            self.colorize("red", f"Error reading 6to4 configurations: {str(e)}", bold=True)
+            sixto4_configs = []
+
+        if not tinyvpn_configs and not udp2raw_configs and not frp_configs and not sixto4_configs:
             self.colorize("yellow", "No configurations found", bold=True)
             self.colorize("cyan", "\nYou can create a new configuration from the Configuration Management menu.", bold=True)
-            
+
             # Print configuration path information
             print("\nConfiguration paths:")
             print(f"TinyVPN: {self.tinyvpn.configs_dir}" + (" (writable)" if os.access(self.tinyvpn.configs_dir, os.W_OK) else " (not writable)"))
             print(f"UDP2RAW: {self.udp2raw.configs_dir}" + (" (writable)" if os.access(self.udp2raw.configs_dir, os.W_OK) else " (not writable)"))
             if self.frp_installed:
                 print(f"FRP: {self.frp.configs_dir}" + (" (writable)" if os.access(self.frp.configs_dir, os.W_OK) else " (not writable)"))
-            
+            print(f"6to4: {self.sixto4.config_dir}" + (" (writable)" if os.access(self.sixto4.config_dir, os.W_OK) else " (not writable)"))
+
             input("\nPress Enter to return to main menu...")
             return
-        
+
         while True:
             self.console.clear()
-            
+
             # Display configurations
             table = Table(show_header=True)
             table.add_column("Name", style="cyan")
@@ -463,12 +484,12 @@ class GamingTunnel:
             table.add_column("Connection", style="magenta")
             table.add_column("↓ Download", style="blue")
             table.add_column("↑ Upload", style="red")
-            
+
             # Add TinyVPN configs to the table
             for config in tinyvpn_configs:
                 config_name = config['name']
                 config_type = "TinyVPN Server" if config['type'] == 'server' else "TinyVPN Client"
-                
+
                 # Check if service is active
                 try:
                     service_suffix = "server" if config['type'] == 'server' else "client"
@@ -480,26 +501,26 @@ class GamingTunnel:
                     status = "[green]Active[/green]" if result.stdout.strip() == "active" else "[red]Inactive[/red]"
                 except:
                     status = "[gray]Unknown[/gray]"
-                
+
                 # Check connection status
                 connection_status = "[green]Online[/green]" if self.tinyvpn.check_connection(config_name) else "[red]Offline[/red]"
-                
+
                 # Get network statistics
                 network_stats = self.tinyvpn.get_network_stats(config_name)
                 download = network_stats["download_human"]
                 upload = network_stats["upload_human"]
-                
+
                 # If there's traffic, mark as connected regardless of ping result
                 if network_stats["download"] > 0 or network_stats["upload"] > 0:
                     connection_status = "[green]Online[/green]"
-                    
+
                 table.add_row(config_name, config_type, status, connection_status, download, upload)
-            
+
             # Add UDP2Raw configs to the table
             for config in udp2raw_configs:
                 config_name = config['name']
                 config_type = "UDP2Raw Server" if config['type'] == 'server' else "UDP2Raw Client"
-                
+
                 # Check if service is active
                 try:
                     service_suffix = "server" if config['type'] == 'server' else "client"
@@ -511,19 +532,19 @@ class GamingTunnel:
                     status = "[green]Active[/green]" if result.stdout.strip() == "active" else "[red]Inactive[/red]"
                 except:
                     status = "[gray]Unknown[/gray]"
-                
+
                 # UDP2Raw doesn't have built-in connection checking or stats like TinyVPN
                 connection_status = "[gray]N/A[/gray]"
                 download = "N/A"
                 upload = "N/A"
-                
+
                 table.add_row(config_name, config_type, status, connection_status, download, upload)
 
             # Add FRP configs to the table
             for config in frp_configs:
                 config_name = config['name']
                 config_type = "FRP Server" if config['type'] == 'server' else "FRP Client"
-                
+
                 # Check if service is active
                 try:
                     service_suffix = "s" if config['type'] == 'server' else "c"
@@ -535,40 +556,67 @@ class GamingTunnel:
                     status = "[green]Active[/green]" if result.stdout.strip() == "active" else "[red]Inactive[/red]"
                 except:
                     status = "[gray]Unknown[/gray]"
-                
+
                 # FRP doesn't have built-in connection checking or stats
                 connection_status = "[gray]N/A[/gray]"
                 download = "N/A"
                 upload = "N/A"
-                
+
                 table.add_row(config_name, config_type, status, connection_status, download, upload)
-            
+
+            # Add 6to4 configs to the table
+            for config_name in sixto4_configs:
+                config_data = self.sixto4.load_config(config_name)
+                if config_data:
+                    services = config_data.get('services', [])
+                    for service in services:
+                        service_name = service['service_name']
+                        config_type = f"6to4 {service['type'].capitalize()}"
+
+                        # Check if service is active
+                        try:
+                            result = subprocess.run(
+                                ["systemctl", "is-active", service_name],
+                                capture_output=True,
+                                text=True
+                            )
+                            status = "[green]Active[/green]" if result.stdout.strip() == "active" else "[red]Inactive[/red]"
+                        except:
+                            status = "[gray]Unknown[/gray]"
+
+                        # 6to4 doesn't have built-in connection checking or stats
+                        connection_status = "[gray]N/A[/gray]"
+                        download = "N/A"
+                        upload = "N/A"
+
+                        table.add_row(f"{config_name}-{service['type']}", config_type, status, connection_status, download, upload)
+
             self.console.print(Panel(table, title="Available Configurations", border_style="cyan"))
-            
+
             # Display actions menu
             action_menu = Table(show_header=True, box=None)
             action_menu.add_column("Option", style="cyan", justify="center")
             action_menu.add_column("Action", style="green")
-            
+
             action_menu.add_row("1", "Select a configuration to view/modify")
             action_menu.add_row("2", "Delete a configuration")
             action_menu.add_row("3", "Refresh connection status")
             action_menu.add_row("4", "View detailed network statistics")
             action_menu.add_row("5", "Run connection diagnostics")
             action_menu.add_row("0", "Return to main menu")
-            
+
             self.console.print(Panel(action_menu, title="Configuration Actions", border_style="cyan"))
-            
+
             # Get user choice
             choice = Prompt.ask("Select an action", choices=["0", "1", "2", "3", "4", "5"], default="0")
-            
+
             if choice == "0":
                 return
-                
+
             elif choice == "1":
                 # Select a configuration to view/modify
                 self.colorize("cyan", "Available configurations:", bold=True)
-                
+
                 # Combine configs for selection, keeping track of their type
                 all_configs = []
                 for config in tinyvpn_configs:
@@ -589,18 +637,28 @@ class GamingTunnel:
                         'type': config['type'],
                         'service': 'frp'
                     })
-                
+                for config_name in sixto4_configs:
+                    config_data = self.sixto4.load_config(config_name)
+                    if config_data:
+                        for service in config_data.get('services', []):
+                            all_configs.append({
+                                'name': f"{config_name}-{service['type']}",
+                                'type': service['type'],
+                                'service': '6to4',
+                                'config_name': config_name
+                            })
+
                 for i, config in enumerate(all_configs, 1):
-                    service_name = "TinyVPN" if config['service'] == 'tinyvpn' else ("UDP2Raw" if config['service'] == 'udp2raw' else "FRP")
+                    service_name = "TinyVPN" if config['service'] == 'tinyvpn' else ("UDP2Raw" if config['service'] == 'udp2raw' else ("FRP" if config['service'] == 'frp' else "6to4"))
                     print(f"{i}. {config['name']} ({service_name} {config['type']})")
-                
+
                 config_idx = IntPrompt.ask("Select a configuration", default=1)
                 if 1 <= config_idx <= len(all_configs):
                     selected_config = all_configs[config_idx - 1]
                     config_name = selected_config['name']
                     config_type = selected_config['type']
                     service = selected_config['service']
-                    
+
                     # Display configuration details based on service type
                     if service == 'tinyvpn':
                         config_data = self.tinyvpn.load_config(config_name)
@@ -608,17 +666,21 @@ class GamingTunnel:
                     elif service == 'udp2raw':
                         config_data = self.udp2raw.load_config(config_name)
                         service_display = "UDP2Raw"
-                    else:  # frp
+                    elif service == 'frp':
                         config_data = self.frp.load_config(config_name)
                         service_display = "FRP"
-                    
+                    else:  # 6to4
+                        actual_config_name = selected_config.get('config_name', config_name.split('-')[0])
+                        config_data = self.sixto4.load_config(actual_config_name)
+                        service_display = "6to4"
+
                     if config_data:
                         self.console.clear()
                         self.colorize("cyan", f"Configuration details for '{config_name}' ({service_display} {config_type}):", bold=True)
                         for key, value in config_data.items():
                             if key != "COMMAND":  # Skip the long command string
                                 print(f"{key}: {value}")
-                        
+
                         # Ask if user wants to modify
                         if Prompt.ask("Do you want to modify this configuration?", choices=["y", "n"], default="n") == "y":
                             if service == 'tinyvpn':
@@ -626,19 +688,21 @@ class GamingTunnel:
                                     self.tinyvpn.modify_server_config(config_name)
                                 else:
                                     self.colorize("yellow", "TinyVPN client configuration modification is not implemented yet.", bold=True)
+                            elif service == '6to4':
+                                self.colorize("yellow", "6to4 configuration modification is not implemented yet.", bold=True)
                             else:  # udp2raw or frp
                                 self.colorize("yellow", f"{service_display} configuration modification is not implemented yet.", bold=True)
                     else:
                         self.colorize("red", f"Failed to load configuration for '{config_name}'", bold=True)
                 else:
                     self.colorize("red", "Invalid selection", bold=True)
-                
+
                 input("\nPress Enter to continue...")
-                
+
             elif choice == "2":
                 # Delete a configuration
                 self.colorize("cyan", "Available configurations:", bold=True)
-                
+
                 # Combine configs for selection, keeping track of their type
                 all_configs = []
                 for config in tinyvpn_configs:
@@ -659,19 +723,29 @@ class GamingTunnel:
                         'type': config['type'],
                         'service': 'frp'
                     })
-                
+                for config_name in sixto4_configs:
+                    config_data = self.sixto4.load_config(config_name)
+                    if config_data:
+                        for service in config_data.get('services', []):
+                            all_configs.append({
+                                'name': f"{config_name}-{service['type']}",
+                                'type': service['type'],
+                                'service': '6to4',
+                                'config_name': config_name
+                            })
+
                 for i, config in enumerate(all_configs, 1):
-                    service_name = "TinyVPN" if config['service'] == 'tinyvpn' else ("UDP2Raw" if config['service'] == 'udp2raw' else "FRP")
+                    service_name = "TinyVPN" if config['service'] == 'tinyvpn' else ("UDP2Raw" if config['service'] == 'udp2raw' else ("FRP" if config['service'] == 'frp' else "6to4"))
                     print(f"{i}. {config['name']} ({service_name} {config['type']})")
-                
+
                 config_idx = IntPrompt.ask("Select a configuration to delete", default=1)
                 if 1 <= config_idx <= len(all_configs):
                     selected_config = all_configs[config_idx - 1]
                     config_name = selected_config['name']
                     config_type = selected_config['type']
                     service = selected_config['service']
-                    service_display = "TinyVPN" if service == 'tinyvpn' else ("UDP2Raw" if service == 'udp2raw' else "FRP")
-                    
+                    service_display = "TinyVPN" if service == 'tinyvpn' else ("UDP2Raw" if service == 'udp2raw' else ("FRP" if service == 'frp' else "6to4"))
+
                     from rich.prompt import Confirm
                     if Confirm.ask(f"Are you sure you want to delete the {service_display} {config_type} configuration '{config_name}'?"):
                         try:
@@ -682,12 +756,15 @@ class GamingTunnel:
                             elif service == 'udp2raw':
                                 self.udp2raw.remove_service(config_name, config_type)
                                 udp2raw_configs = self.udp2raw.get_available_configs()
-                            else:  # frp
+                            elif service == 'frp':
                                 self.frp.remove_service(config_name, config_type)
                                 frp_configs = self.frp.get_available_configs()
-                            
+                            else:  # 6to4
+                                self.sixto4.remove_configuration(config_name)
+                                sixto4_configs = self.sixto4.get_available_configs()
+
                             # Check if all configurations have been deleted
-                            if not tinyvpn_configs and not udp2raw_configs and not frp_configs:
+                            if not tinyvpn_configs and not udp2raw_configs and not frp_configs and not sixto4_configs:
                                 self.colorize("green", "All configurations have been deleted.", bold=True)
                                 input("\nPress Enter to continue...")
                                 return
@@ -697,25 +774,25 @@ class GamingTunnel:
                 else:
                     self.colorize("red", "Invalid selection", bold=True)
                     input("\nPress Enter to continue...")
-            
+
             elif choice == "3":
                 # Refresh connection status - just continue the loop to refresh the display
                 self.colorize("cyan", "Refreshing connection status...", bold=True)
                 time.sleep(1)  # Give a small delay to show the message
-                
+
             elif choice == "4":
                 # View detailed network statistics
                 self.colorize("cyan", "Available configurations:", bold=True)
-                
+
                 # For network stats, we only include TinyVPN configs as UDP2Raw doesn't provide this
                 for i, config in enumerate(tinyvpn_configs, 1):
                     print(f"{i}. {config['name']} ({config['type']})")
-                
+
                 if not tinyvpn_configs:
                     self.colorize("yellow", "No TinyVPN configurations available for network statistics.", bold=True)
                     input("\nPress Enter to continue...")
                     continue
-                
+
                 config_idx = IntPrompt.ask("Select a configuration to view network statistics", default=1)
                 if 1 <= config_idx <= len(tinyvpn_configs):
                     config_name = tinyvpn_configs[config_idx - 1]['name']
@@ -723,31 +800,31 @@ class GamingTunnel:
                     self.tinyvpn.show_network_usage(config_name)
                 else:
                     self.colorize("red", "Invalid selection", bold=True)
-                
+
                 input("\nPress Enter to continue...")
-                
+
             elif choice == "5":
                 # Run connection diagnostics
                 self.colorize("cyan", "Available configurations:", bold=True)
-                
+
                 # For diagnostics, we only include TinyVPN configs
                 for i, config in enumerate(tinyvpn_configs, 1):
                     print(f"{i}. {config['name']} ({config['type']})")
-                
+
                 if not tinyvpn_configs:
                     self.colorize("yellow", "No TinyVPN configurations available for diagnostics.", bold=True)
                     input("\nPress Enter to continue...")
                     continue
-                
+
                 config_idx = IntPrompt.ask("Select a configuration to run diagnostics", default=1)
                 if 1 <= config_idx <= len(tinyvpn_configs):
                     config_name = tinyvpn_configs[config_idx - 1]['name']
                     self.console.clear()
-                    
+
                     # Run detailed diagnostics
                     self.colorize("cyan", f"Running connection diagnostics for '{config_name}'...", bold=True)
                     debug_info = self.tinyvpn.debug_connection_status(config_name)
-                    
+
                     # Display diagnostics in a readable format
                     print(f"\nConfiguration Type: {debug_info['config_type']}")
                     print(f"Interface exists: {'✅' if debug_info['interface_exists'] else '❌'}")
@@ -756,26 +833,26 @@ class GamingTunnel:
                         print(f"Has traffic: {'✅' if debug_info['has_traffic'] else '❌'}")
                         print(f"Received bytes: {debug_info['rx_bytes']}")
                         print(f"Transmitted bytes: {debug_info['tx_bytes']}")
-                    
+
                     print(f"Subnet found: {'✅' if debug_info['subnet_found'] else '❌'}")
                     if debug_info['subnet_found']:
                         print(f"Remote IP to ping: {debug_info['ip_to_ping']}")
                         print(f"Ping successful: {'✅' if debug_info['ping_successful'] else '❌'}")
-                        
+
                         if 'ping_output' in debug_info:
                             print("\nPing output:")
                             print(debug_info['ping_output'])
-                    
+
                     if debug_info['error']:
                         self.colorize("red", f"\nError: {debug_info['error']}", bold=True)
-                    
+
                     # Add manual detection instructions
                     print("\nManual connection verification:")
                     print(f"1. Try direct ping: ping {debug_info['ip_to_ping']}")
                     print(f"2. Check interface: ip link show {config_name}")
                     print(f"3. Check routing: ip route | grep {config_name}")
                     print(f"4. Check service: sudo systemctl status tinyvpn-{config_name}-{debug_info['config_type']}.service")
-                    
+
                     # Connection status determination
                     if debug_info['interface_exists'] and debug_info['interface_up']:
                         if debug_info['has_traffic'] or debug_info['ping_successful']:
@@ -789,7 +866,7 @@ class GamingTunnel:
                         self.colorize("red", "\nDiagnosis: Connection is DOWN or not established correctly", bold=True)
                 else:
                     self.colorize("red", "Invalid selection", bold=True)
-                
+
                 input("\nPress Enter to continue...")
 
     def service_menu(self, show_status=False):
@@ -797,18 +874,18 @@ class GamingTunnel:
         if not self.cores_installed and not self.frp_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             return
-        
+
         self.console.clear()
-        
+
         # Optionally display server information
         if show_status:
             self.display_status()
-        
+
         # Service menu
         menu = Table(show_header=True, box=None)
         menu.add_column("Option", style="cyan", justify="center")
         menu.add_column("Description", style="green")
-        
+
         menu.add_row("1", "Check TinyVPN Service Status")
         menu.add_row("2", "View TinyVPN Logs")
         menu.add_row("3", "Restart TinyVPN Service")
@@ -821,13 +898,17 @@ class GamingTunnel:
         menu.add_row("10", "View FRP Logs")
         menu.add_row("11", "Restart FRP Service")
         menu.add_row("12", "Remove FRP Service")
-        menu.add_row("13", "Update Server Information")
+        menu.add_row("13", "Check 6to4 Service Status")
+        menu.add_row("14", "View 6to4 Logs")
+        menu.add_row("15", "Restart 6to4 Service")
+        menu.add_row("16", "Remove 6to4 Service")
+        menu.add_row("17", "Update Server Information")
         menu.add_row("0", "Return to main menu")
-        
+
         self.console.print(Panel(menu, title="Service Management", border_style="cyan"))
-        
-        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], default="0")
-        
+
+        choice = Prompt.ask("Enter your choice", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17"], default="0")
+
         if choice == "1":
             self.tinyvpn.check_service_status()
         elif choice == "2":
@@ -853,6 +934,30 @@ class GamingTunnel:
         elif choice == "12":
             self.frp.remove_service()
         elif choice == "13":
+            self.sixto4.check_service_status()
+            input("\nPress Enter to continue...")
+        elif choice == "14":
+            self.sixto4.logs_menu()
+        elif choice == "15":
+            configs = self.sixto4.get_available_configs()
+            if configs:
+                self.colorize("cyan", "Available 6to4 configurations:", bold=True)
+                for i, config in enumerate(configs, 1):
+                    print(f"{i}. {config}")
+                try:
+                    config_idx = int(input("Select configuration to restart: ")) - 1
+                    if 0 <= config_idx < len(configs):
+                        self.sixto4.restart_service(configs[config_idx])
+                    else:
+                        self.colorize("red", "Invalid selection!", 'red')
+                except ValueError:
+                    self.colorize("red", "Invalid input!", 'red')
+            else:
+                self.colorize("yellow", "No 6to4 configurations available.", bold=True)
+            input("\nPress Enter to continue...")
+        elif choice == "16":
+            self.sixto4.remove_menu()
+        elif choice == "17":
             # Force refresh by passing True
             self.display_status(force_refresh=True)
             input("\nPress Enter to continue...")
@@ -866,22 +971,25 @@ class GamingTunnel:
         if not self.cores_installed and not self.frp_installed:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             return
-        
+
         self.colorize("yellow", "Restarting all configurations...", bold=True)
-        
+
         # Get TinyVPN configurations
         tinyvpn_configs = self.tinyvpn.get_available_configs()
-        
+
         # Get UDP2Raw configurations
         udp2raw_configs = self.udp2raw.get_available_configs()
 
         # Get FRP configurations
         frp_configs = self.frp.get_available_configs()
-        
-        if not tinyvpn_configs and not udp2raw_configs and not frp_configs:
+
+        # Get 6to4 configurations
+        sixto4_configs = self.sixto4.get_available_configs()
+
+        if not tinyvpn_configs and not udp2raw_configs and not frp_configs and not sixto4_configs:
             self.colorize("yellow", "No configurations found to restart", bold=True)
             return
-        
+
         # Restart each service
         with Progress(
             SpinnerColumn(),
@@ -889,7 +997,7 @@ class GamingTunnel:
             transient=False,
         ) as progress:
             restart_task = progress.add_task(description="Restarting services...", total=None)
-            
+
             # Restart TinyVPN services
             for config in tinyvpn_configs:
                 service_suffix = "server" if config['type'] == "server" else "client"
@@ -903,7 +1011,7 @@ class GamingTunnel:
                 except:
                     pass
                 time.sleep(0.5)
-            
+
             # Restart UDP2Raw services
             for config in udp2raw_configs:
                 service_suffix = "server" if config['type'] == "server" else "client"
@@ -931,10 +1039,26 @@ class GamingTunnel:
                 except:
                     pass
                 time.sleep(0.5)
-            
+
+            # Restart 6to4 services
+            for config_name in sixto4_configs:
+                config_data = self.sixto4.load_config(config_name)
+                if config_data:
+                    for service in config_data.get('services', []):
+                        progress.update(restart_task, description=f"Restarting {service['service_name']} service...")
+                        try:
+                            subprocess.run(
+                                ["systemctl", "restart", service['service_name']],
+                                capture_output=True,
+                                text=True
+                            )
+                        except:
+                            pass
+                        time.sleep(0.5)
+
             progress.update(restart_task, description="All services restarted")
             time.sleep(1)
-        
+
         self.colorize("green", "All configurations restarted successfully", bold=True)
 
     def network_stats(self):
@@ -943,9 +1067,9 @@ class GamingTunnel:
             self.colorize("red", "Core components not installed. Please install them first.", bold=True)
             input("\nPress Enter to continue...")
             return
-        
+
         self.console.clear()
-        
+
         # Get TinyVPN configurations
         try:
             tinyvpn_configs = self.tinyvpn.get_available_configs()
@@ -953,19 +1077,19 @@ class GamingTunnel:
             self.colorize("red", f"Error reading TinyVPN configurations: {str(e)}", bold=True)
             input("\nPress Enter to continue...")
             return
-        
+
         if not tinyvpn_configs:
             self.colorize("yellow", "No TinyVPN configurations found", bold=True)
             self.colorize("cyan", "\nYou can create a new configuration from the Configuration Management menu.", bold=True)
             input("\nPress Enter to continue...")
             return
-        
+
         # Display configurations
         self.colorize("cyan", "Available TinyVPN configurations:", bold=True)
-        
+
         for i, config in enumerate(tinyvpn_configs, 1):
             print(f"{i}. {config['name']} ({config['type']})")
-        
+
         config_idx = IntPrompt.ask("Select a configuration to view network statistics", default=1)
         if 1 <= config_idx <= len(tinyvpn_configs):
             config_name = tinyvpn_configs[config_idx - 1]['name']
@@ -979,58 +1103,59 @@ class GamingTunnel:
                 self.colorize("red", f"Error reading network statistics: {str(e)}", bold=True)
         else:
             self.colorize("red", "Invalid selection", bold=True)
-        
+
         input("\nPress Enter to continue...")
 
     def show_menu(self):
         """Show main menu"""
         self.console.clear()
-        
+
         # Set skip_server_info to False for the main menu, we want to see server info here
         self.skip_server_info = False
-        
+
         # Server information
         self.display_status()
-        
+
         # Display installed components
         components = Table(show_header=False, box=None)
         components.add_column("Component", style="cyan")
         components.add_column("Status", style="green")
-        
+
         components.add_row("TinyVPN", "Installed ✓" if self.tinyvpn_installed else "Not Installed ✗")
         components.add_row("UDP2RAW", "Installed ✓" if self.udp2raw_installed else "Not Installed ✗")
         components.add_row("FRP", "Installed ✓" if self.frp_installed else "Not Installed ✗")
-        
+
         self.console.print(Panel(components, title="Components", border_style="cyan"))
-        
+
         # Main menu
         menu = Table(show_header=True, box=None)
         menu.add_column("Option", style="cyan", justify="center")
         menu.add_column("Description", style="green")
-        
+
         # Always add the core options with sequential numbering
         menu.add_row("1", "Configuration Management")
         menu.add_row("2", "Service Management")
         menu.add_row("3", "Network Statistics")
         menu.add_row("4", "List Configurations")
-        
+        menu.add_row("5", "6to4 Tunnel Manager")
+
         if not self.frp_installed:
-            menu.add_row("5", "Install FRP")
-        
+            menu.add_row("6", "Install FRP")
+
         menu.add_row("0", "Exit")
-        
+
         self.console.print(Panel(menu, title="Main Menu", border_style="cyan"))
-        
+
         # Build choice array based on the options we're showing
-        choices = ["0", "1", "2", "3", "4"]
+        choices = ["0", "1", "2", "3", "4", "5"]
         if not self.frp_installed:
-            choices.append("5")
-        
+            choices.append("6")
+
         choice = Prompt.ask("Enter your choice", choices=choices, default="0")
-        
+
         # Set the skip_server_info flag to True for sub-menus to make them load faster
         self.skip_server_info = True
-        
+
         # Map the user's choice to the appropriate action
         if choice == "1":  # Configuration Management
             self.create_config()
@@ -1046,7 +1171,10 @@ class GamingTunnel:
             # Don't immediately return to show_menu - list_configs will handle returning to the main menu
             # when the user chooses to do so
             self.show_menu()
-        elif choice == "5" and not self.frp_installed:  # Install FRP
+        elif choice == "5":  # 6to4 Tunnel Manager
+            self.sixto4.show_menu()
+            self.show_menu()
+        elif choice == "6" and not self.frp_installed:  # Install FRP
             self.install_frp()
             self.show_menu()
         elif choice == "0":  # Exit
@@ -1057,21 +1185,21 @@ class GamingTunnel:
     def install_frp(self):
         """Install FRP binaries"""
         self.colorize("cyan", "Installing FRP...", bold=True)
-        
+
         if self.frp.is_installed():
             self.colorize("green", "FRP is already installed.", bold=True)
             self.frp_installed = True
             return True
-            
+
         # Install FRP
         success = self.frp.install()
-        
+
         if success:
             self.colorize("green", "FRP installed successfully.", bold=True)
             self.frp_installed = True
         else:
             self.colorize("red", "Failed to install FRP.", bold=True)
-            
+
         return success
 
     def remove_all_services(self):
@@ -1082,27 +1210,27 @@ class GamingTunnel:
         if not self.tinyvpn_installed and not self.udp2raw_installed and not self.frp_installed:
             self.colorize("yellow", "No core components are installed.", bold=True)
             return
-            
+
         self.colorize("yellow", "Removing core components...", bold=True)
-        
+
         try:
             if os.path.exists(self.tinyvpn_file):
                 os.remove(self.tinyvpn_file)
                 self.colorize("green", "TinyVPN core removed.", bold=True)
-            
+
             if os.path.exists(self.udp2raw_file):
                 os.remove(self.udp2raw_file)
                 self.colorize("green", "UDP2RAW core removed.", bold=True)
-                
+
             # Remove FRP binaries
             if os.path.exists(self.frp.frps_binary):
                 os.remove(self.frp.frps_binary)
                 self.colorize("green", "FRP server binary removed.", bold=True)
-                
+
             if os.path.exists(self.frp.frpc_binary):
                 os.remove(self.frp.frpc_binary)
                 self.colorize("green", "FRP client binary removed.", bold=True)
-                
+
             self.tinyvpn_installed = False
             self.udp2raw_installed = False
             self.frp_installed = False
@@ -1114,8 +1242,8 @@ class GamingTunnel:
     def create_symlink(self):
         """Create a symlink for the Gaming Tunnel"""
     pass
-    
-    
+
+
 def main():
     app = GamingTunnel()
     # Only try to install if not already installed
