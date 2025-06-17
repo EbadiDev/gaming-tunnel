@@ -178,7 +178,7 @@ class TinyVPN:
         # Prepare the configuration
         server_cmd = (
             f"-s \"-l[::]:{port}\" {fec} --sub-net {subnet} --mtu {mtu} "
-            f"{mode} --tun-dev {config_name} --disable-obscure -k \"{password}\""
+            f"{mode} --tun-dev {config_name} -k \"{password}\""
         )
         
         # Save configuration
@@ -427,7 +427,7 @@ WantedBy=multi-user.target
         # Prepare the configuration
         server_cmd = (
             f"-s \"-l[::]:{new_port}\" {new_fec} --sub-net {new_subnet} --mtu {new_mtu} "
-            f"{new_mode} --tun-dev {config_name} --disable-obscure"
+            f"{new_mode} --tun-dev {config_name}"
         )
         
         # Save configuration
@@ -858,7 +858,7 @@ WantedBy=multi-user.target
             f.write("[Service]\n")
             f.write("Type=simple\n")
             f.write(f"WorkingDirectory={self.base_dir}\n")
-            f.write(f"ExecStart={self.binary_path} -c -r{formatted_server_addr}:{server_port} {fec_param} --sub-net {subnet} {mode_param} --mtu {mtu} --tun-dev {config_name} -k \"{password}\" --keep-reconnect --disable-obscure\n")
+            f.write(f"ExecStart={self.binary_path} -c -r{formatted_server_addr}:{server_port} {fec_param} --sub-net {subnet} {mode_param} --mtu {mtu} --tun-dev {config_name} -k \"{password}\" --keep-reconnect\n")
             f.write("Restart=always\n")
             f.write("RestartSec=3\n\n")
             
